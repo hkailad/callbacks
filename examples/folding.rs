@@ -392,7 +392,7 @@ fn main() {
 
     let start = SystemTime::now();
 
-    let proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
+    let _proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
 
     println!("Finalizing proof time: {:?}", start.elapsed().unwrap());
 

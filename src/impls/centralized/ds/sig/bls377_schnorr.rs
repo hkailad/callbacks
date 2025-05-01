@@ -305,13 +305,13 @@ impl AllocVar<BLS377SchnorrPubkey, F> for BLS377SchnorrPubkeyVar {
 
             let aff_pk = pk.0.into_affine();
 
-            let BLS377_v = <EVar as AllocVar<Affine<EdwardsConfig>, _>>::new_variable(
+            let bls377_v = <EVar as AllocVar<Affine<EdwardsConfig>, _>>::new_variable(
                 ns!(cs, "entry"),
                 || Ok(&aff_pk),
                 mode,
             )?;
 
-            Ok(Self(BLS377_v))
+            Ok(Self(bls377_v))
         })
     }
 }
