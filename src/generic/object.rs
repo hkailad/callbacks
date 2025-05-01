@@ -11,6 +11,7 @@ use ark_relations::{
     ns,
     r1cs::{ConstraintSystemRef, Namespace, SynthesisError},
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use std::borrow::Borrow;
 
 /// A nullifier type. Represents a nullifier (or serial number).
@@ -44,7 +45,7 @@ pub type IdVar<F> = FpVar<F>;
 
 /// The ZKFields type provides all the necessary types for a user to properly interact with a
 /// server. It is always contained within the `User` type.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ZKFields<F: PrimeField> {
     /// The nullifier or serial number of the user state.
     pub nul: Nul<F>,

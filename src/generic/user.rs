@@ -23,10 +23,15 @@ use ark_relations::{
         ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, Namespace, SynthesisError,
     },
 };
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
+};
 use ark_snark::SNARK;
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, RngCore};
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    io::{Read, Write},
+};
 
 use crate::generic::{
     bulletin::PublicCallbackBul,
@@ -302,6 +307,75 @@ pub struct User<F: PrimeField + Absorb, U: UserData<F>> {
     pub(crate) scan_index: Option<usize>,
 
     pub(crate) in_progress_cbs: Vec<Vec<u8>>,
+}
+
+impl<F: PrimeField + Absorb, U: UserData<F>> CanonicalSerialize for User<F, U>
+where
+    U: CanonicalSerialize,
+{
+    fn serialize_with_mode<W: Write>(
+        &self,
+        mut writer: W,
+        compress: Compress,
+    ) -> Result<(), SerializationError> {
+        self.data.serialize_with_mode(&mut writer, compress)?;
+        self.zk_fields.serialize_with_mode(&mut writer, compress)?;
+        self.callbacks.serialize_with_mode(&mut writer, compress)?;
+        self.scan_index.serialize_with_mode(&mut writer, compress)?;
+        (self.in_progress_cbs.serialized_size(compress))
+            .serialize_with_mode(&mut writer, compress)?;
+        self.in_progress_cbs
+            .serialize_with_mode(&mut writer, compress)?;
+
+        Ok(())
+    }
+
+    fn serialized_size(&self, compress: Compress) -> usize {
+        self.data.serialized_size(compress)
+            + self.zk_fields.serialized_size(compress)
+            + self.callbacks.serialized_size(compress)
+            + self.scan_index.serialized_size(compress)
+            + self.in_progress_cbs.serialized_size(compress)
+    }
+}
+
+impl<F: PrimeField + Absorb, U: UserData<F>> Valid for User<F, U>
+where
+    U: Valid,
+{
+    fn check(&self) -> Result<(), SerializationError> {
+        self.data.check()?;
+        self.zk_fields.check()?;
+        self.callbacks.check()?;
+        self.scan_index.check()?;
+        self.in_progress_cbs.check()?;
+        Ok(())
+    }
+}
+
+impl<F: PrimeField + Absorb, U: UserData<F>> CanonicalDeserialize for User<F, U>
+where
+    U: CanonicalDeserialize,
+{
+    fn deserialize_with_mode<R: Read>(
+        mut reader: R,
+        compress: Compress,
+        validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        let data = <U>::deserialize_with_mode(&mut reader, compress, validate)?;
+        let zk_fields = ZKFields::deserialize_with_mode(&mut reader, compress, validate)?;
+        let callbacks = <Vec<Vec<u8>>>::deserialize_with_mode(&mut reader, compress, validate)?;
+        let scan_index = <Option<usize>>::deserialize_with_mode(&mut reader, compress, validate)?;
+        let in_progress_cbs =
+            <Vec<Vec<u8>>>::deserialize_with_mode(&mut reader, compress, validate)?;
+        Ok(User {
+            data,
+            zk_fields,
+            callbacks,
+            scan_index,
+            in_progress_cbs,
+        })
+    }
 }
 
 impl<F: PrimeField + Absorb, U: UserData<F>> std::fmt::Octal for User<F, U> {

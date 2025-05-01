@@ -32,7 +32,7 @@ impl<F: PrimeField + Absorb, const R: usize> HasherZK<F> for Poseidon<R> {
     }
 
     fn hash_in_zk(data: &[FpVar<F>]) -> Result<FpVar<F>, SynthesisError> {
-        let params = gen_poseidon_params(2, false);
+        let params = gen_poseidon_params(R, false);
         let params_var = poseidon::constraints::CRHParametersVar { parameters: params };
 
         poseidon::constraints::CRHGadget::evaluate(&params_var, data)
@@ -91,7 +91,7 @@ impl<F: PrimeField + Absorb, const R: usize> HasherZK<F> for CircPoseidon<R> {
     }
 
     fn hash_in_zk(data: &[FpVar<F>]) -> Result<FpVar<F>, SynthesisError> {
-        let params = get_poseidon_params(2);
+        let params = get_poseidon_params(R);
         let params_var = poseidon::constraints::CRHParametersVar { parameters: params };
 
         poseidon::constraints::CRHGadget::evaluate(&params_var, data)

@@ -1,18 +1,17 @@
-use std::time::SystemTime;
-
 use ark_bn254::{constraints::GVar, Bn254 as E, Fr as F, G1Projective as Projective};
 use ark_groth16::Groth16;
 use ark_grumpkin::{constraints::GVar as GVar2, Projective as Projective2};
 use ark_r1cs_std::{eq::EqGadget, fields::fp::FpVar, prelude::Boolean};
 use ark_relations::r1cs::Result as ArkResult;
 use folding_schemes::{
-    commitment::{kzg::KZG, pedersen::Pedersen},
-    folding::nova::{Nova, PreprocessorParam},
+    commitment::pedersen::Pedersen,
+    folding::nova::{zk::RandomizedIVCProof, Nova, PreprocessorParam},
     frontend::FCircuit,
     transcript::poseidon::poseidon_canonical_config,
     FoldingScheme,
 };
 use rand::thread_rng;
+use std::time::SystemTime;
 use zk_callbacks::{
     generic::{
         bulletin::{JoinableBulletin, PublicCallbackBul, UserBul},
@@ -299,9 +298,9 @@ fn main() {
         Projective2,
         GVar2,
         FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>>,
-        KZG<'static, E>,
-        Pedersen<Projective2>,
-        false,
+        Pedersen<Projective, true>,
+        Pedersen<Projective2, true>,
+        true,
     >;
 
     // Setup a scan for a single callback (the first one in the list)
@@ -345,19 +344,55 @@ fn main() {
             .unwrap_or_default()],
     };
 
-    let mut folding_scheme = NF::init(&nova_params, f_circ, init_state.clone()).unwrap();
+    let cb = u.get_cb(1);
+    let tik: FakeSigPubkey<F> = cb.get_ticket();
+
+    let x =
+        <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
+
+    let prs2: PrivScanArgs<F, CBArg, NoSigOTP<F>, CSt, 1> = PrivScanArgs {
+        priv_n_tickets: [cb],
+        post_times: [x.map_or(F::from(0), |(_, p2)| p2)],
+        enc_args: [x.map_or(F::from(0), |(p1, _)| p1)],
+        memb_priv: [store
+            .callback_bul
+            .get_memb_witness(&tik)
+            .unwrap_or_default()],
+        nmemb_priv: [store
+            .callback_bul
+            .get_nmemb_witness(&tik)
+            .unwrap_or_default()],
+    };
+
+    let mut folding_scheme: NF = NF::init(&nova_params, f_circ, init_state.clone()).unwrap();
 
     let start = SystemTime::now();
 
     folding_scheme
-        .prove_step(rng, [u.to_fold_repr(), prs1.to_fold_repr()].concat(), None)
+        .prove_step(
+            &mut rng,
+            [u.to_fold_repr(), prs1.to_fold_repr()].concat(),
+            None,
+        )
         .unwrap();
 
     println!("Fold step time: {:?}", start.elapsed().unwrap());
 
     let start = SystemTime::now();
 
-    let _proof = folding_scheme.ivc_proof();
+    folding_scheme
+        .prove_step(
+            &mut rng,
+            [u.to_fold_repr(), prs2.to_fold_repr()].concat(),
+            None,
+        )
+        .unwrap();
+
+    println!("Fold step time: {:?}", start.elapsed().unwrap());
+
+    let start = SystemTime::now();
+
+    let proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
 
     println!("Finalizing proof time: {:?}", start.elapsed().unwrap());
 
