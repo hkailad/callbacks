@@ -122,7 +122,7 @@ impl<'a> From<&'a BLS377SchnorrPrivkey> for BLS377SchnorrPubkey {
         // g^privkey is the pubkey
         let g = EProj::generator();
         let pubkey = g * privkey.0;
-        BLS377SchnorrPubkey(pubkey)
+        BLS377SchnorrPubkey(pubkey.into_affine().into())
     }
 }
 

@@ -122,7 +122,7 @@ impl<'a> From<&'a JJSchnorrPrivkey> for JJSchnorrPubkey {
         // g^privkey is the pubkey
         let g = Jubjub::generator();
         let pubkey = g * privkey.0;
-        JJSchnorrPubkey(pubkey)
+        JJSchnorrPubkey(pubkey.into_affine().into())
     }
 }
 

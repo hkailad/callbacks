@@ -124,7 +124,7 @@ impl<'a> From<&'a GRSchnorrPrivkey> for GRSchnorrPubkey {
         // g^privkey is the pubkey
         let g = G::generator();
         let pubkey = g * privkey.0;
-        GRSchnorrPubkey(pubkey)
+        GRSchnorrPubkey(pubkey.into_affine().into())
     }
 }
 
