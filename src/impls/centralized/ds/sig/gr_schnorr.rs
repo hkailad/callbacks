@@ -368,7 +368,7 @@ impl CondSelectGadget<Fq> for GRSchnorrPubkeyVar {
 }
 
 /// The Schnorr signature scheme, on the BN254 curve. Implements [`Signature`].
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct GrumpkinSchnorr;
 
 impl Signature<Fq> for GrumpkinSchnorr {
