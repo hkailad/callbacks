@@ -32,6 +32,16 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand::Rng;
 use std::borrow::Borrow;
 
+#[cfg(feature = "folding")]
+#[cfg(any(feature = "folding", doc))]
+#[doc(cfg(feature = "folding"))]
+use crate::generic::fold::FoldSer;
+
+#[cfg(feature = "folding")]
+#[cfg(any(feature = "folding", doc))]
+#[doc(cfg(feature = "folding"))]
+use ark_ff::{AdditiveGroup, Field};
+
 type FV = FpVar<Fq>;
 
 const SCHNORR_HASH_SEPARATOR: u8 = 0x03;
@@ -80,6 +90,67 @@ pub struct GRSchnorrSignatureVar {
     e: Vec<UInt8<Fq>>,
     /// Response to challenge
     s: Vec<UInt8<Fq>>,
+}
+
+#[cfg(feature = "folding")]
+#[cfg(any(feature = "folding", doc))]
+#[doc(cfg(feature = "folding"))]
+impl FoldSer<Fq, GRSchnorrSignatureVar> for GRSchnorrSignature {
+    fn repr_len() -> usize {
+        F::default().serialized_size(ark_serialize::Compress::No) * 2
+    }
+
+    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<Fq>> {
+        let mut r1 = Vec::new();
+        self.s.serialize_compressed(&mut r1).unwrap();
+
+        let mut r2 = Vec::new();
+        self.e.serialize_compressed(&mut r2).unwrap();
+
+        r1.iter()
+            .map(|&x| Fq::from(x))
+            .chain(r2.iter().map(|&x| Fq::from(x)))
+            .collect()
+    }
+
+    fn from_fold_repr(ser: &[crate::generic::object::Ser<Fq>]) -> Self {
+        let x = ser
+            .iter()
+            .map(|x| x.into_bigint().0[0].try_into().unwrap())
+            .collect::<Vec<u8>>();
+
+        let reader = &*x;
+
+        let s = F::deserialize_compressed(reader).unwrap();
+
+        let e = F::deserialize_compressed(reader).unwrap();
+
+        Self { e, s }
+    }
+
+    fn from_fold_repr_zk(
+        var: &[crate::generic::object::SerVar<Fq>],
+    ) -> Result<GRSchnorrSignatureVar, SynthesisError> {
+        let x = var
+            .iter()
+            .map(|x| UInt8::from_fp(x).unwrap().0)
+            .collect::<Vec<UInt8<Fq>>>();
+
+        let e = x[0..(Self::repr_len() / 2)].to_vec();
+        let s = x[(Self::repr_len() / 2)..].to_vec();
+        Ok(GRSchnorrSignatureVar { e, s })
+    }
+
+    fn to_fold_repr_zk(
+        var: &GRSchnorrSignatureVar,
+    ) -> Result<Vec<crate::generic::object::SerVar<Fq>>, SynthesisError> {
+        Ok(var
+            .e
+            .iter()
+            .map(|x| x.to_fp().unwrap())
+            .chain(var.s.iter().map(|x| x.to_fp().unwrap()))
+            .collect())
+    }
 }
 
 impl AllocVar<GRSchnorrSignature, Fq> for GRSchnorrSignatureVar {
