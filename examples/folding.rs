@@ -27,7 +27,9 @@ use zk_callbacks::{
     impls::{
         centralized::{
             crypto::{FakeSigPrivkey, FakeSigPubkey, NoSigOTP},
-            ds::sigstore::{NonmembStore, UOVCallbackStore, UOVObjStore, UOVStore},
+            ds::sigstore::{
+                GRSchnorrCallbackStore, GRSchnorrObjStore, GRSchnorrStore, NonmembStore,
+            },
         },
         hash::Poseidon,
     },
@@ -84,19 +86,19 @@ type UV = UserVar<F, TestFolding>;
 type CB = Callback<F, TestFolding, CBArg, CBArgVar>;
 type Int1 = Interaction<F, TestFolding, (), (), (), (), CBArg, CBArgVar, 1>;
 type PubScan =
-    PubScanArgs<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, UOVCallbackStore<F, F>, NUMSCANS>;
+    PubScanArgs<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
 type PubScanVar =
-    PubScanArgsVar<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, UOVCallbackStore<F, F>, NUMSCANS>;
+    PubScanArgsVar<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
 
-type PrivScan = PrivScanArgs<F, F, NoSigOTP<F>, UOVCallbackStore<F, F>, NUMSCANS>;
-type PrivScanVar = PrivScanArgsVar<F, F, NoSigOTP<F>, UOVCallbackStore<F, F>, NUMSCANS>;
+type PrivScan = PrivScanArgs<F, F, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
+type PrivScanVar = PrivScanArgsVar<F, F, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
 
 type IntScan =
     Interaction<F, TestFolding, PubScan, PubScanVar, PrivScan, PrivScanVar, CBArg, CBArgVar, 0>;
 
-type OSt = UOVObjStore<F>;
-type CSt = UOVCallbackStore<F, F>;
-type St = UOVStore<F, F>;
+type OSt = GRSchnorrObjStore;
+type CSt = GRSchnorrCallbackStore<F>;
+type St = GRSchnorrStore<F>;
 
 fn int_meth<'a>(tu: &'a U, _pub_args: (), _priv_args: ()) -> U {
     let mut a = tu.clone();
