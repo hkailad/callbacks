@@ -184,7 +184,7 @@ fn main() {
         .generate_keys::<Poseidon<2>, Groth16<E>, NoSigOTP<F>, OSt>(
             &mut rng,
             Some(store.obj_bul.get_pubkey()),
-            None,
+            (),
             false,
         );
 
@@ -193,7 +193,7 @@ fn main() {
         .generate_keys::<Poseidon<2>, Groth16<E>, NoSigOTP<F>, OSt>(
             &mut rng,
             Some(store.obj_bul.get_pubkey()),
-            Some(ex),
+            ex,
             true,
         );
 
