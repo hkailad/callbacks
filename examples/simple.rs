@@ -196,18 +196,19 @@ fn main() {
         .generate_keys::<Poseidon<2>, Groth16<E>, Cr, GRSchnorrObjStore>(
             &mut rng,
             Some(store.obj_bul.get_pubkey()),
-            None,
+            (),
             false,
         );
 
     // generate keys for the callback scan
-    let (pks, vks) = get_scan_interaction::<_, _, _, _, _, _, Poseidon<2>, NUMSCANS>()
-        .generate_keys::<Poseidon<2>, Groth16<E>, Cr, GRSchnorrObjStore>(
-        &mut rng,
-        Some(store.obj_bul.get_pubkey()),
-        Some(ex),
-        true,
-    );
+    let (pks, vks) =
+        get_scan_interaction::<_, _, _, _, _, GRSchnorrCallbackStore<F>, Poseidon<2>, NUMSCANS>()
+            .generate_keys::<Poseidon<2>, Groth16<E>, Cr, GRSchnorrObjStore>(
+            &mut rng,
+            Some(store.obj_bul.get_pubkey()),
+            ex,
+            true,
+        );
 
     // generate keys for the arbitrary predicate
     let (pki, vki) = generate_keys_for_statement_in::<
@@ -220,7 +221,7 @@ fn main() {
         (),
         Groth16<E>,
         GRSchnorrObjStore,
-    >(&mut rng, some_pred, Some(store.obj_bul.get_pubkey()), None);
+    >(&mut rng, some_pred, Some(store.obj_bul.get_pubkey()), ());
 
     println!(
         "\t (time) Generated proof keys: {:?}",

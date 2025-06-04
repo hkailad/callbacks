@@ -403,9 +403,8 @@ where
     /// If the public membership data is a constant, it must be encoded into the key, and so it
     /// must be set in `memb_data`. Otherwise, the `memb_data` should be set to `None`.
     ///
-    /// This also applies to the `aux_data`. If the auxiliary public arguments to the interaction
-    /// method is a constant, then it must be encoded, and so is set in `aux_data`. Otherwise, it
-    /// should be set to `None`.
+    /// For `aux_data`, if the auxiliary public arguments to the interaction method is a constant,
+    /// this should be done in the `AllocVar` implementation of the auxiliary data type.
     ///
     /// # Example
     /// ```rust
@@ -485,7 +484,7 @@ where
         &self,
         rng: &mut (impl CryptoRng + RngCore),
         memb_data: Option<Bul::MembershipPub>,
-        aux_data: Option<PubArgs>,
+        aux_data: PubArgs,
         is_scan: bool,
     ) -> (Snark::ProvingKey, Snark::VerifyingKey) {
         let u = User::create(U::default(), rng);
@@ -518,7 +517,7 @@ where
             pub_new_com: u.commit::<H>(),
             pub_old_nul: u.zk_fields.nul,
             pub_issued_callback_coms: cbs.map(|x| x.commit::<H>()),
-            pub_args: aux_data.unwrap_or_default(),
+            pub_args: aux_data,
             associated_method: x,
             is_scan,
             bul_memb_is_const: memb_data.is_some(),
@@ -767,9 +766,8 @@ impl<
 ///
 /// Note that the commitment to the user for these statements is public.
 ///
-/// If the public arguments to the predicate are constant, then it must be encoded within the key.
-/// Therefore, if the public arguments are constant, one can pass them in through `aux_data`. If
-/// not constant, then `aux_data` must be set to `None`.
+/// For `aux_data`, if the auxiliary public arguments to the predicate are constant,
+/// this should be done in the `AllocVar` implementation of the auxiliary data type.
 ///
 ///# Example
 /// ```rust
@@ -827,7 +825,7 @@ pub fn generate_keys_for_statement<
 >(
     rng: &mut (impl CryptoRng + RngCore),
     pred: SingularPredicate<F, UserVar<F, U>, ComVar<F>, PubArgsVar, PrivArgsVar>,
-    aux_data: Option<PubArgs>,
+    aux_data: PubArgs,
 ) -> (Snark::ProvingKey, Snark::VerifyingKey)
 where
     Standard: Distribution<F>,
@@ -836,7 +834,7 @@ where
     let out = ProvePredicateCircuit {
         priv_user: u.clone(),
         pub_com: u.commit::<H>(),
-        pub_args: aux_data.unwrap_or_default(),
+        pub_args: aux_data,
         priv_args: PrivArgs::default(),
         associated_method: pred,
     };
@@ -901,9 +899,8 @@ impl<
 /// If the public membership data is a constant, it must be encoded into the key, and so it
 /// must be set in `memb_data`. Otherwise, the `memb_data` should be set to `None`.
 ///
-/// This also applies to the `aux_data`. If the auxiliary public arguments to the interaction
-/// method is a constant, then it must be encoded, and so is set in `aux_data`. Otherwise, it
-/// should be set to `None`.
+/// For `aux_data`, if the auxiliary public arguments to the predicate are constant,
+/// this should be done in the `AllocVar` implementation of the auxiliary data type.
 ///
 ///# Example
 /// ```rust
@@ -969,7 +966,7 @@ pub fn generate_keys_for_statement_in<
     pred: SingularPredicate<F, UserVar<F, U>, ComVar<F>, PubArgsVar, PrivArgsVar>,
     memb_data: Option<Bul::MembershipPub>,
 
-    aux_data: Option<PubArgs>,
+    aux_data: PubArgs,
 ) -> (Snark::ProvingKey, Snark::VerifyingKey)
 where
     Standard: Distribution<F>,
@@ -979,7 +976,7 @@ where
         ProvePredInCircuit {
             priv_user: u.clone(),
             priv_extra_membership_data: Bul::MembershipWitness::default(),
-            pub_args: aux_data.unwrap_or_default(),
+            pub_args: aux_data,
             priv_args: PrivArgs::default(),
             bul_memb_is_const: memb_data.is_some(),
             pub_extra_membership_data: memb_data.unwrap_or_default(),
@@ -1227,7 +1224,7 @@ pub fn generate_keys_for_scan<
 >(
     rng: &mut (impl CryptoRng + RngCore),
     memb_data: Option<Bul::MembershipPub>,
-    aux_data: Option<PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMSCANS>>,
+    aux_data: PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMSCANS>,
 ) -> (Snark::ProvingKey, Snark::VerifyingKey)
 where
     U::UserDataVar: CondSelectGadget<F> + EqGadget<F>,
