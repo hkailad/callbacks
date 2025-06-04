@@ -655,6 +655,11 @@ where
         self.scan_index.is_some()
     }
 
+    /// Gets the scan index. This should not be used unless you know what you are doing.
+    pub fn get_scan_index(&self) -> Option<usize> {
+        self.scan_index
+    }
+
     /// Force set the scan index. This should not be used unless you know what you are doing.
     pub fn force_set_scan_index(&mut self, data: usize) {
         self.scan_index = Some(data)

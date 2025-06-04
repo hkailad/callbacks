@@ -37,11 +37,6 @@ use std::borrow::Borrow;
 #[doc(cfg(feature = "folding"))]
 use crate::generic::fold::FoldSer;
 
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-use ark_ff::{AdditiveGroup, Field};
-
 type FV = FpVar<Fq>;
 
 const SCHNORR_HASH_SEPARATOR: u8 = 0x03;
