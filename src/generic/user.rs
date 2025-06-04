@@ -322,8 +322,6 @@ where
         self.zk_fields.serialize_with_mode(&mut writer, compress)?;
         self.callbacks.serialize_with_mode(&mut writer, compress)?;
         self.scan_index.serialize_with_mode(&mut writer, compress)?;
-        (self.in_progress_cbs.serialized_size(compress))
-            .serialize_with_mode(&mut writer, compress)?;
         self.in_progress_cbs
             .serialize_with_mode(&mut writer, compress)?;
 
