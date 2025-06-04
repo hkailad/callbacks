@@ -655,6 +655,16 @@ where
         self.scan_index.is_some()
     }
 
+    /// Force set the scan index. This should not be used unless you know what you are doing.
+    pub fn force_set_scan_index(&mut self, data: usize) {
+        self.scan_index = Some(data)
+    }
+
+    /// Force clear the scan index. This should not be used unless you know what you are doing.
+    pub fn force_clear_scan_index(&mut self) {
+        self.scan_index = None
+    }
+
     /// Gets the arguments for a scan.
     pub fn get_scan_arguments<
         CBArgs: Clone + std::fmt::Debug + PartialEq + Eq,
