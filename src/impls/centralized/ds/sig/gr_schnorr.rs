@@ -37,7 +37,7 @@ type FV = FpVar<Fq>;
 const SCHNORR_HASH_SEPARATOR: u8 = 0x03;
 
 /// A private Grumpkin BN254 Schnorr signing key.
-#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default, Debug)]
 pub struct GRSchnorrPrivkey(F);
 
 /// A public Grumpkin BN254 Schnorr verification key.

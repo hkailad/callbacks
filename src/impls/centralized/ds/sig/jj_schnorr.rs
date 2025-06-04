@@ -51,7 +51,7 @@ where
 type JubjubFr = <Jubjub as PrimeGroup>::ScalarField;
 
 /// A private Jubjub BLS Schnorr signing key.
-#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default, Debug)]
 pub struct JJSchnorrPrivkey(JubjubFr);
 
 /// A public Jubjub BLS Schnorr verification key.

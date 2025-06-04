@@ -51,7 +51,7 @@ where
 type EProjFr = <EProj as PrimeGroup>::ScalarField;
 
 /// A private twisted edwards BLS Schnorr signing key.
-#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Default, Debug)]
 pub struct BLS377SchnorrPrivkey(EProjFr);
 
 /// A public twisted edwards BLS Schnorr verification key.
