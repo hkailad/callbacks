@@ -299,7 +299,7 @@ fn main() {
         GVar,
         Projective2,
         GVar2,
-        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>>,
+        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 1>,
         Pedersen<Projective, true>,
         Pedersen<Projective2, true>,
         true,
@@ -317,7 +317,7 @@ fn main() {
         cb_methods: cb_methods.clone(), // Vec of callbacks (used to check which method to call)
     };
 
-    let f_circ: FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>> =
+    let f_circ: FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 1> =
         FoldingScan::new(ps.clone()).unwrap();
 
     let poseidon_config = poseidon_canonical_config::<F>();
@@ -394,9 +394,17 @@ fn main() {
 
     let start = SystemTime::now();
 
-    let _proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
+    let proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
 
     println!("Finalizing proof time: {:?}", start.elapsed().unwrap());
+
+    println!(
+        "Proof sizes: {:?} {:?} {:?} {:?}",
+        proof.W_i_prime.E.len(),
+        proof.W_i_prime.W.len(),
+        proof.cf_W_i.E.len(),
+        proof.cf_W_i.W.len()
+    );
 
     // println!("User at the end : {:?}", u);
 }

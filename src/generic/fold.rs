@@ -175,8 +175,9 @@ impl<
         CBArgs: Clone,
         Crypto: AECipherSigZK<F, CBArgs>,
         CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-    > FoldSer<F, PrivScanArgsVar<F, CBArgs, Crypto, CBul, 1>>
-    for PrivScanArgs<F, CBArgs, Crypto, CBul, 1>
+        const NUMCBS: usize,
+    > FoldSer<F, PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>>
+    for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
 where
     Crypto::SigPK: FoldSer<F, Crypto::SigPKV>,
     Crypto::EncKey: FoldSer<F, Crypto::EncKeyVar>,
@@ -186,146 +187,203 @@ where
 {
     fn from_fold_repr(ser: &[Ser<F>]) -> Self {
         let mut lc = 0;
-        let tik = Crypto::SigPK::from_fold_repr(&ser[0..Crypto::SigPK::repr_len()]);
-        lc += Crypto::SigPK::repr_len();
-        let cb_method_id = ser[lc];
-        lc += 1;
-        let expirable = ser[lc] != F::ZERO;
-        lc += 1;
-        let expiration = ser[lc];
-        lc += 1;
-        let enc_key = Crypto::EncKey::from_fold_repr(&ser[lc..(lc + Crypto::EncKey::repr_len())]);
-        lc += Crypto::EncKey::repr_len();
-        let com_rand = ser[lc];
-        lc += 1;
-        let enc_args = Crypto::Ct::from_fold_repr(&ser[lc..(lc + Crypto::Ct::repr_len())]);
-        lc += Crypto::Ct::repr_len();
-        let post_times = ser[lc];
-        lc += 1;
-        let memb_priv = CBul::MembershipWitness::from_fold_repr(
-            &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
-        );
-        lc += CBul::MembershipWitness::repr_len();
-        let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr(
-            &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
-        );
 
-        let cb_entry: CallbackTicket<F, CBArgs, Crypto> = CallbackTicket {
-            tik,
-            cb_method_id,
-            expirable,
-            expiration,
-            enc_key,
-        };
+        let mut ticket_vec = vec![];
+        let mut args_vec = vec![];
+        let mut times_vec = vec![];
+        let mut memb_vec = vec![];
+        let mut nmemb_vec = vec![];
+        for _ in 0..NUMCBS {
+            let tik = Crypto::SigPK::from_fold_repr(&ser[0..Crypto::SigPK::repr_len()]);
+            lc += Crypto::SigPK::repr_len();
+            let cb_method_id = ser[lc];
+            lc += 1;
+            let expirable = ser[lc] != F::ZERO;
+            lc += 1;
+            let expiration = ser[lc];
+            lc += 1;
+            let enc_key =
+                Crypto::EncKey::from_fold_repr(&ser[lc..(lc + Crypto::EncKey::repr_len())]);
+            lc += Crypto::EncKey::repr_len();
+            let com_rand = ser[lc];
+            lc += 1;
+            let enc_args = Crypto::Ct::from_fold_repr(&ser[lc..(lc + Crypto::Ct::repr_len())]);
+            lc += Crypto::Ct::repr_len();
+            let post_times = ser[lc];
+            lc += 1;
+            let memb_priv = CBul::MembershipWitness::from_fold_repr(
+                &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
+            );
+            lc += CBul::MembershipWitness::repr_len();
+            let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr(
+                &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
+            );
 
-        let priv_ticket = CallbackCom { cb_entry, com_rand };
+            let cb_entry: CallbackTicket<F, CBArgs, Crypto> = CallbackTicket {
+                tik,
+                cb_method_id,
+                expirable,
+                expiration,
+                enc_key,
+            };
+
+            let priv_ticket = CallbackCom { cb_entry, com_rand };
+            ticket_vec.push(priv_ticket);
+            args_vec.push(enc_args);
+            times_vec.push(post_times);
+            memb_vec.push(memb_priv);
+            nmemb_vec.push(nmemb_priv);
+        }
 
         PrivScanArgs {
-            priv_n_tickets: [priv_ticket],
-            enc_args: [enc_args],
-            post_times: [post_times],
-            memb_priv: [memb_priv],
-            nmemb_priv: [nmemb_priv],
+            priv_n_tickets: ticket_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Ticket length wrong.")),
+            enc_args: args_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Args length wrong.")),
+            post_times: times_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Times length wrong.")),
+            memb_priv: memb_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Membership data length wrong.")),
+            nmemb_priv: nmemb_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Nonmembership data length wrong.")),
         }
     }
 
     fn from_fold_repr_zk(
         ser: &[SerVar<F>],
-    ) -> Result<PrivScanArgsVar<F, CBArgs, Crypto, CBul, 1>, SynthesisError> {
+    ) -> Result<PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>, SynthesisError> {
         let mut lc = 0;
-        let tik = Crypto::SigPK::from_fold_repr_zk(&ser[0..Crypto::SigPK::repr_len()])?;
-        lc += Crypto::SigPK::repr_len();
-        let cb_method_id = ser[lc].clone();
-        lc += 1;
-        let expirable = ser[lc].is_neq(&FpVar::Constant(F::ZERO))?;
-        lc += 1;
-        let expiration = ser[lc].clone();
-        lc += 1;
-        let enc_key =
-            Crypto::EncKey::from_fold_repr_zk(&ser[lc..(lc + Crypto::EncKey::repr_len())])?;
-        lc += Crypto::EncKey::repr_len();
-        let com_rand = ser[lc].clone();
-        lc += 1;
-        let enc_args = Crypto::Ct::from_fold_repr_zk(&ser[lc..(lc + Crypto::Ct::repr_len())])?;
-        lc += Crypto::Ct::repr_len();
-        let post_times = ser[lc].clone();
-        lc += 1;
-        let memb_priv = CBul::MembershipWitness::from_fold_repr_zk(
-            &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
-        )?;
-        lc += CBul::MembershipWitness::repr_len();
-        let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr_zk(
-            &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
-        )?;
 
-        let cb_entry: CallbackTicketVar<F, CBArgs, Crypto> = CallbackTicketVar {
-            tik,
-            cb_method_id,
-            expirable,
-            expiration,
-            enc_key,
-        };
+        let mut ticket_vec = vec![];
+        let mut args_vec = vec![];
+        let mut times_vec = vec![];
+        let mut memb_vec = vec![];
+        let mut nmemb_vec = vec![];
 
-        let priv_ticket = CallbackComVar { cb_entry, com_rand };
+        for _ in 0..NUMCBS {
+            let tik = Crypto::SigPK::from_fold_repr_zk(&ser[0..Crypto::SigPK::repr_len()])?;
+            lc += Crypto::SigPK::repr_len();
+            let cb_method_id = ser[lc].clone();
+            lc += 1;
+            let expirable = ser[lc].is_neq(&FpVar::Constant(F::ZERO))?;
+            lc += 1;
+            let expiration = ser[lc].clone();
+            lc += 1;
+            let enc_key =
+                Crypto::EncKey::from_fold_repr_zk(&ser[lc..(lc + Crypto::EncKey::repr_len())])?;
+            lc += Crypto::EncKey::repr_len();
+            let com_rand = ser[lc].clone();
+            lc += 1;
+            let enc_args = Crypto::Ct::from_fold_repr_zk(&ser[lc..(lc + Crypto::Ct::repr_len())])?;
+            lc += Crypto::Ct::repr_len();
+            let post_times = ser[lc].clone();
+            lc += 1;
+            let memb_priv = CBul::MembershipWitness::from_fold_repr_zk(
+                &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
+            )?;
+            lc += CBul::MembershipWitness::repr_len();
+            let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr_zk(
+                &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
+            )?;
+
+            let cb_entry: CallbackTicketVar<F, CBArgs, Crypto> = CallbackTicketVar {
+                tik,
+                cb_method_id,
+                expirable,
+                expiration,
+                enc_key,
+            };
+
+            let priv_ticket = CallbackComVar { cb_entry, com_rand };
+            ticket_vec.push(priv_ticket);
+            args_vec.push(enc_args);
+            times_vec.push(post_times);
+            memb_vec.push(memb_priv);
+            nmemb_vec.push(nmemb_priv);
+        }
 
         Ok(PrivScanArgsVar {
-            priv_n_tickets: [priv_ticket],
-            enc_args: [enc_args],
-            post_times: [post_times],
-            memb_priv: [memb_priv],
-            nmemb_priv: [nmemb_priv],
+            priv_n_tickets: ticket_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Ticket length wrong.")),
+            enc_args: args_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Args length wrong.")),
+            post_times: times_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Times length wrong.")),
+            memb_priv: memb_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Membership data length wrong.")),
+            nmemb_priv: nmemb_vec
+                .try_into()
+                .unwrap_or_else(|_| panic!("Nonmembership data length wrong.")),
         })
     }
 
     fn repr_len() -> usize {
-        Crypto::SigPK::repr_len()
-            + 1
-            + 1
-            + 1
-            + Crypto::EncKey::repr_len()
-            + 1
-            + Crypto::Ct::repr_len()
-            + 1
-            + CBul::MembershipWitness::repr_len()
-            + CBul::NonMembershipWitness::repr_len()
+        NUMCBS
+            * (Crypto::SigPK::repr_len()
+                + 1
+                + 1
+                + 1
+                + Crypto::EncKey::repr_len()
+                + 1
+                + Crypto::Ct::repr_len()
+                + 1
+                + CBul::MembershipWitness::repr_len()
+                + CBul::NonMembershipWitness::repr_len())
     }
 
     fn to_fold_repr(&self) -> Vec<Ser<F>> {
-        let mut ser = self.priv_n_tickets[0].cb_entry.tik.to_fold_repr();
-        ser.push(self.priv_n_tickets[0].cb_entry.cb_method_id);
-        ser.push(F::from(self.priv_n_tickets[0].cb_entry.expirable));
-        ser.push(self.priv_n_tickets[0].cb_entry.expiration);
-        ser.extend(self.priv_n_tickets[0].cb_entry.enc_key.to_fold_repr());
-        ser.push(self.priv_n_tickets[0].com_rand);
-        ser.extend(self.enc_args[0].to_fold_repr());
-        ser.push(self.post_times[0]);
-        ser.extend(self.memb_priv[0].to_fold_repr());
-        ser.extend(self.nmemb_priv[0].to_fold_repr());
+        let mut ser: Vec<F> = vec![];
+        for i in 0..NUMCBS {
+            ser.extend(self.priv_n_tickets[i].cb_entry.tik.to_fold_repr());
+            ser.push(self.priv_n_tickets[i].cb_entry.cb_method_id);
+            ser.push(F::from(self.priv_n_tickets[i].cb_entry.expirable));
+            ser.push(self.priv_n_tickets[i].cb_entry.expiration);
+            ser.extend(self.priv_n_tickets[i].cb_entry.enc_key.to_fold_repr());
+            ser.push(self.priv_n_tickets[i].com_rand);
+            ser.extend(self.enc_args[i].to_fold_repr());
+            ser.push(self.post_times[i]);
+            ser.extend(self.memb_priv[i].to_fold_repr());
+            ser.extend(self.nmemb_priv[i].to_fold_repr());
+        }
         ser
     }
 
     fn to_fold_repr_zk(
-        var: &PrivScanArgsVar<F, CBArgs, Crypto, CBul, 1>,
+        var: &PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>,
     ) -> Result<Vec<SerVar<F>>, SynthesisError> {
-        let mut ser = Crypto::SigPK::to_fold_repr_zk(&var.priv_n_tickets[0].cb_entry.tik)?;
-        ser.push(var.priv_n_tickets[0].cb_entry.cb_method_id.clone());
-        ser.extend(
-            var.priv_n_tickets[0]
-                .cb_entry
-                .expirable
-                .to_constraint_field()?,
-        );
-        ser.push(var.priv_n_tickets[0].cb_entry.expiration.clone());
-        ser.extend(Crypto::EncKey::to_fold_repr_zk(
-            &var.priv_n_tickets[0].cb_entry.enc_key,
-        )?);
-        ser.push(var.priv_n_tickets[0].com_rand.clone());
-        ser.extend(Crypto::Ct::to_fold_repr_zk(&var.enc_args[0])?);
-        ser.push(var.post_times[0].clone());
-        ser.extend(CBul::MembershipWitness::to_fold_repr_zk(&var.memb_priv[0])?);
-        ser.extend(CBul::NonMembershipWitness::to_fold_repr_zk(
-            &var.nmemb_priv[0],
-        )?);
+        let mut ser: Vec<SerVar<F>> = vec![];
+        for i in 0..NUMCBS {
+            ser.extend(Crypto::SigPK::to_fold_repr_zk(
+                &var.priv_n_tickets[i].cb_entry.tik,
+            )?);
+            ser.push(var.priv_n_tickets[i].cb_entry.cb_method_id.clone());
+            ser.extend(
+                var.priv_n_tickets[i]
+                    .cb_entry
+                    .expirable
+                    .to_constraint_field()?,
+            );
+            ser.push(var.priv_n_tickets[i].cb_entry.expiration.clone());
+            ser.extend(Crypto::EncKey::to_fold_repr_zk(
+                &var.priv_n_tickets[i].cb_entry.enc_key,
+            )?);
+            ser.push(var.priv_n_tickets[i].com_rand.clone());
+            ser.extend(Crypto::Ct::to_fold_repr_zk(&var.enc_args[i])?);
+            ser.push(var.post_times[i].clone());
+            ser.extend(CBul::MembershipWitness::to_fold_repr_zk(&var.memb_priv[i])?);
+            ser.extend(CBul::NonMembershipWitness::to_fold_repr_zk(
+                &var.nmemb_priv[i],
+            )?);
+        }
         Ok(ser)
     }
 }
@@ -349,13 +407,14 @@ pub struct FoldingScan<
     Crypto: AECipherSigZK<F, CBArgs>,
     CBul: PublicCallbackBul<F, CBArgs, Crypto>,
     H: FieldHash<F>,
+    const NUMCBS: usize,
 > {
     _f: PhantomData<F>,
     _u: PhantomData<U>,
     _c: PhantomData<Crypto>,
     _h: PhantomData<H>,
     /// The public arguments during the scan.
-    pub const_args: PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, 1>,
+    pub const_args: PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>,
 }
 
 impl<
@@ -366,7 +425,8 @@ impl<
         Crypto: AECipherSigZK<F, CBArgs>,
         CBul: PublicCallbackBul<F, CBArgs, Crypto>,
         H: FieldHash<F>,
-    > std::fmt::Debug for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H>
+        const NUMCBS: usize,
+    > std::fmt::Debug for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Folding scan")
@@ -381,7 +441,8 @@ impl<
         Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar>,
         CBul: PublicCallbackBul<F, CBArgs, Crypto> + Clone + std::fmt::Debug,
         H: FieldHash<F>,
-    > FCircuit<F> for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H>
+        const NUMCBS: usize,
+    > FCircuit<F> for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
 where
     Crypto::SigPK: FoldSer<F, Crypto::SigPKV>,
     Crypto::EncKey: FoldSer<F, Crypto::EncKeyVar>,
@@ -390,7 +451,7 @@ where
     CBul::NonMembershipWitness: FoldSer<F, CBul::NonMembershipWitnessVar>,
     U::UserDataVar: CondSelectGadget<F> + EqGadget<F>,
 {
-    type Params = PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, 1>;
+    type Params = PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>;
 
     fn new(init: Self::Params) -> Result<Self, folding_schemes::Error> {
         Ok(Self {
@@ -407,7 +468,7 @@ where
     }
 
     fn external_inputs_len(&self) -> usize {
-        User::<F, U>::repr_len() + <PrivScanArgs<F, CBArgs, Crypto, CBul, 1>>::repr_len()
+        User::<F, U>::repr_len() + <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::repr_len()
     }
 
     fn step_native(
@@ -419,10 +480,10 @@ where
         external_inputs: Vec<F>, // inputs that are not part of the state
     ) -> Result<Vec<F>, folding_schemes::Error> {
         let u = User::<F, U>::from_fold_repr(&external_inputs[0..User::<F, U>::repr_len()]);
-        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, 1>>::from_fold_repr(
+        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::from_fold_repr(
             &external_inputs[User::<F, U>::repr_len()..],
         );
-        let new_user = scan_method::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, 1>(
+        let new_user = scan_method::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
             &u,
             self.const_args.clone(),
             priv_args,
@@ -441,12 +502,13 @@ where
     ) -> Result<Vec<ark_r1cs_std::fields::fp::FpVar<F>>, ark_relations::r1cs::SynthesisError> {
         let u = User::<F, U>::from_fold_repr_zk(&external_inputs[0..User::<F, U>::repr_len()])?;
         User::commit_in_zk::<H>(u.clone())?.enforce_equal(&z_i[0])?;
-        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, 1>>::from_fold_repr_zk(
+        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::from_fold_repr_zk(
             &external_inputs[User::<F, U>::repr_len()..],
         )?;
         let p = PubScanArgsVar::new_constant(cs.clone(), self.const_args.clone())?;
-        let new_user =
-            scan_apply_method_zk::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, 1>(&u, p, priv_args)?;
+        let new_user = scan_apply_method_zk::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
+            &u, p, priv_args,
+        )?;
         Ok(vec![User::commit_in_zk::<H>(new_user)?])
     }
 }
