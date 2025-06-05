@@ -136,35 +136,54 @@ impl<F: PrimeField> FoldSer<F, ZKFieldsVar<F>> for ZKFields<F> {
 
 impl<F: PrimeField + Absorb, U: FoldableUserData<F>> FoldSer<F, UserVar<F, U>> for User<F, U> {
     fn repr_len() -> usize {
-        U::repr_len() + <ZKFields<F>>::repr_len()
+        2 + U::repr_len() + <ZKFields<F>>::repr_len()
     }
 
     fn to_fold_repr(&self) -> Vec<Ser<F>> {
-        let mut ser = self.data.to_fold_repr();
+        let mut ser = vec![
+            F::from(self.callbacks.len() as u64),
+            F::from((self.scan_index.unwrap_or(0)) as u64),
+        ];
+        ser.extend(self.data.to_fold_repr());
         ser.extend(self.zk_fields.to_fold_repr());
         ser
     }
 
     fn from_fold_repr(ser: &[Ser<F>]) -> Self {
-        let data = U::from_fold_repr(&ser[0..U::repr_len()]);
-        let zk_fields = ZKFields::from_fold_repr(&ser[U::repr_len()..]);
+        let data = U::from_fold_repr(&ser[2..(2 + U::repr_len())]);
+        let zk_fields = ZKFields::from_fold_repr(&ser[(2 + U::repr_len())..]);
+        let mut cb_vec = vec![];
+        let mut ip_cbs = vec![];
+        for _ in 0..<F as Into<<F as PrimeField>::BigInt>>::into(ser[0]).as_ref()[0] {
+            cb_vec.push(vec![]);
+            ip_cbs.push(vec![]);
+        }
+        let scan_id = <F as Into<<F as PrimeField>::BigInt>>::into(ser[1]).as_ref()[0];
+
+        let index = if scan_id == 0 {
+            None
+        } else {
+            Some(scan_id as usize)
+        };
+
         Self {
             data,
             zk_fields,
-            callbacks: vec![],
-            scan_index: None,
-            in_progress_cbs: vec![],
+            callbacks: cb_vec,
+            scan_index: index,
+            in_progress_cbs: ip_cbs,
         }
     }
 
     fn from_fold_repr_zk(ser: &[SerVar<F>]) -> Result<UserVar<F, U>, SynthesisError> {
-        let data = U::from_fold_repr_zk(&ser[0..U::repr_len()])?;
-        let zk_fields = ZKFields::from_fold_repr_zk(&ser[U::repr_len()..])?;
+        let data = U::from_fold_repr_zk(&ser[2..(2 + U::repr_len())])?;
+        let zk_fields = ZKFields::from_fold_repr_zk(&ser[(2 + U::repr_len())..])?;
         Ok(UserVar { data, zk_fields })
     }
 
     fn to_fold_repr_zk(var: &UserVar<F, U>) -> Result<Vec<SerVar<F>>, SynthesisError> {
-        let mut servar = U::to_fold_repr_zk(&var.data)?;
+        let mut servar = vec![FpVar::Constant(F::from(100)), FpVar::Constant(F::from(1))];
+        servar.extend(U::to_fold_repr_zk(&var.data)?);
         servar.extend(<ZKFields<F>>::to_fold_repr_zk(&var.zk_fields)?);
         Ok(servar)
     }
@@ -194,7 +213,7 @@ where
         let mut memb_vec = vec![];
         let mut nmemb_vec = vec![];
         for _ in 0..NUMCBS {
-            let tik = Crypto::SigPK::from_fold_repr(&ser[0..Crypto::SigPK::repr_len()]);
+            let tik = Crypto::SigPK::from_fold_repr(&ser[lc..(lc + Crypto::SigPK::repr_len())]);
             lc += Crypto::SigPK::repr_len();
             let cb_method_id = ser[lc];
             lc += 1;
@@ -218,6 +237,7 @@ where
             let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr(
                 &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
             );
+            lc += CBul::NonMembershipWitness::repr_len();
 
             let cb_entry: CallbackTicket<F, CBArgs, Crypto> = CallbackTicket {
                 tik,
@@ -266,7 +286,7 @@ where
         let mut nmemb_vec = vec![];
 
         for _ in 0..NUMCBS {
-            let tik = Crypto::SigPK::from_fold_repr_zk(&ser[0..Crypto::SigPK::repr_len()])?;
+            let tik = Crypto::SigPK::from_fold_repr_zk(&ser[lc..(lc + Crypto::SigPK::repr_len())])?;
             lc += Crypto::SigPK::repr_len();
             let cb_method_id = ser[lc].clone();
             lc += 1;
@@ -290,6 +310,8 @@ where
             let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr_zk(
                 &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
             )?;
+
+            lc += CBul::NonMembershipWitness::repr_len();
 
             let cb_entry: CallbackTicketVar<F, CBArgs, Crypto> = CallbackTicketVar {
                 tik,

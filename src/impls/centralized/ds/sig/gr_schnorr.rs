@@ -96,10 +96,10 @@ impl FoldSer<Fq, GRSchnorrSignatureVar> for GRSchnorrSignature {
     }
 
     fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<Fq>> {
-        let mut r1 = Vec::new();
+        let mut r1: Vec<u8> = Vec::new();
         self.s.serialize_compressed(&mut r1).unwrap();
 
-        let mut r2 = Vec::new();
+        let mut r2: Vec<u8> = Vec::new();
         self.e.serialize_compressed(&mut r2).unwrap();
 
         r1.iter()

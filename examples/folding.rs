@@ -299,7 +299,7 @@ fn main() {
         GVar,
         Projective2,
         GVar2,
-        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 1>,
+        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 2>,
         Pedersen<Projective, true>,
         Pedersen<Projective2, true>,
         true,
@@ -308,16 +308,16 @@ fn main() {
     // Setup a scan for a single callback (the first one in the list)
     let ps = PubScanArgs {
         // Create the public scanning arguments
-        memb_pub: [store.callback_bul.get_pubkey()], // Public membership data (pubkey)
-        is_memb_data_const: true,                    // it is constant
-        nmemb_pub: [store.callback_bul.nmemb_bul.get_pubkey()], // Public nonmemb data (pubkey for range sigs)
+        memb_pub: [store.callback_bul.get_pubkey(); 2], // Public membership data (pubkey)
+        is_memb_data_const: true,                       // it is constant
+        nmemb_pub: [store.callback_bul.nmemb_bul.get_pubkey(); 2], // Public nonmemb data (pubkey for range sigs)
         is_nmemb_data_const: true,
         cur_time: store.callback_bul.nmemb_bul.get_epoch(), // *current* time as of this proof generation
         bulletin: store.callback_bul.clone(),               // bulletin handle
         cb_methods: cb_methods.clone(), // Vec of callbacks (used to check which method to call)
     };
 
-    let f_circ: FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 1> =
+    let f_circ: FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 2> =
         FoldingScan::new(ps.clone()).unwrap();
 
     let poseidon_config = poseidon_canonical_config::<F>();
@@ -329,21 +329,45 @@ fn main() {
     let cb = u.get_cb(0);
     let tik: FakeSigPubkey<F> = cb.get_ticket();
 
+    let cb2 = u.get_cb(1);
+    let tik2: FakeSigPubkey<F> = cb.get_ticket();
+
     let x =
         <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
 
-    let prs1: PrivScanArgs<F, CBArg, NoSigOTP<F>, CSt, 1> = PrivScanArgs {
-        priv_n_tickets: [cb],
-        post_times: [x.map_or(F::from(0), |(_, p2)| p2)],
-        enc_args: [x.map_or(F::from(0), |(p1, _)| p1)],
-        memb_priv: [store
-            .callback_bul
-            .get_memb_witness(&tik)
-            .unwrap_or_default()],
-        nmemb_priv: [store
-            .callback_bul
-            .get_nmemb_witness(&tik)
-            .unwrap_or_default()],
+    let x2 =
+        <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
+
+    let prs1: PrivScanArgs<F, CBArg, NoSigOTP<F>, CSt, 2> = PrivScanArgs {
+        priv_n_tickets: [cb, cb2],
+        post_times: [
+            x.map_or(F::from(0), |(_, p2)| p2),
+            x2.map_or(F::from(0), |(_, p2)| p2),
+        ],
+        enc_args: [
+            x.map_or(F::from(0), |(p1, _)| p1),
+            x2.map_or(F::from(0), |(p1, _)| p1),
+        ],
+        memb_priv: [
+            store
+                .callback_bul
+                .get_memb_witness(&tik)
+                .unwrap_or_default(),
+            store
+                .callback_bul
+                .get_memb_witness(&tik2)
+                .unwrap_or_default(),
+        ],
+        nmemb_priv: [
+            store
+                .callback_bul
+                .get_nmemb_witness(&tik)
+                .unwrap_or_default(),
+            store
+                .callback_bul
+                .get_nmemb_witness(&tik2)
+                .unwrap_or_default(),
+        ],
     };
 
     let cb = u.get_cb(1);
@@ -380,17 +404,17 @@ fn main() {
 
     println!("Fold step time: {:?}", start.elapsed().unwrap());
 
-    let start = SystemTime::now();
+    // let start = SystemTime::now();
 
-    folding_scheme
-        .prove_step(
-            &mut rng,
-            [u.to_fold_repr(), prs2.to_fold_repr()].concat(),
-            None,
-        )
-        .unwrap();
+    // folding_scheme
+    //     .prove_step(
+    //         &mut rng,
+    //         [u.to_fold_repr(), prs2.to_fold_repr()].concat(),
+    //         None,
+    //     )
+    //     .unwrap();
 
-    println!("Fold step time: {:?}", start.elapsed().unwrap());
+    // println!("Fold step time: {:?}", start.elapsed().unwrap());
 
     let start = SystemTime::now();
 
@@ -406,5 +430,22 @@ fn main() {
         proof.cf_W_i.W.len()
     );
 
-    // println!("User at the end : {:?}", u);
+    let verify = RandomizedIVCProof::verify::<
+        Pedersen<Projective, true>,
+        GVar2,
+        Pedersen<Projective2, true>,
+    >(
+        &folding_scheme.r1cs,
+        &folding_scheme.cf_r1cs,
+        folding_scheme.pp_hash,
+        &folding_scheme.poseidon_config,
+        folding_scheme.i,
+        folding_scheme.z_0,
+        folding_scheme.z_i,
+        &proof,
+    );
+
+    println!("{:?}", verify);
+
+    println!("User at the end : {:?}", u);
 }
