@@ -72,7 +72,8 @@ pub struct CallbackTicketVar<F: PrimeField + Absorb, Args: Clone, Crypto: AECiph
 impl<Args: Clone, Crypto: AECipherSigZK<F, Args>, F: PrimeField + Absorb>
     CallbackTicket<F, Args, Crypto>
 {
-    pub(crate) fn serialize(&self) -> Vec<Ser<F>> {
+    /// Serialize a callback into field elements.
+    pub fn serialize(&self) -> Vec<Ser<F>> {
         [
             self.tik.to_field_elements().unwrap(),
             self.cb_method_id.to_field_elements().unwrap(),
@@ -87,7 +88,8 @@ impl<Args: Clone, Crypto: AECipherSigZK<F, Args>, F: PrimeField + Absorb>
 impl<Args: Clone, Crypto: AECipherSigZK<F, Args>, F: PrimeField + Absorb>
     CallbackTicketVar<F, Args, Crypto>
 {
-    pub(crate) fn serialize(&self) -> Result<Vec<SerVar<F>>, SynthesisError> {
+    /// Serialize a callback into field elements in-circuit.
+    pub fn serialize(&self) -> Result<Vec<SerVar<F>>, SynthesisError> {
         Ok([
             self.tik.to_constraint_field()?,
             self.cb_method_id.to_constraint_field()?,
