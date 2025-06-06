@@ -174,14 +174,19 @@ pub struct CallbackComVar<F: PrimeField + Absorb, Args: Clone, Crypto: AECipherS
 impl<Args: Clone, Crypto: AECipherSigZK<F, Args>, F: PrimeField + Absorb>
     CallbackCom<F, Args, Crypto>
 {
-    pub(crate) fn commit<H: FieldHash<F>>(&self) -> Com<F> {
+    /// Produce a commitment to the callback entry.
+    ///
+    /// Uses the hash `H` to produce a commitment. Note that the nonce is already stored within the
+    /// callback entry.
+    pub fn commit<H: FieldHash<F>>(&self) -> Com<F> {
         let ser_fields = self.cb_entry.serialize();
         let com_rand_ser = self.com_rand.to_field_elements().unwrap();
         let full_dat = [ser_fields.as_slice(), com_rand_ser.as_slice()].concat();
         H::hash(&full_dat)
     }
 
-    pub(crate) fn commit_in_zk<H: FieldHash<F>>(
+    /// Produce a commitment of `cb_var` in-circuit.
+    pub fn commit_in_zk<H: FieldHash<F>>(
         cb_var: CallbackComVar<F, Args, Crypto>,
     ) -> Result<ComVar<F>, SynthesisError> {
         let ser_fields = cb_var.cb_entry.serialize()?;
