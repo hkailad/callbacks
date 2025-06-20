@@ -11,12 +11,13 @@ use crate::{
     },
 };
 use ark_bls12_381::{Fr as BlsFr, Fr as F};
-use ark_ec::{twisted_edwards::Affine, AffineRepr, CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup, PrimeGroup, twisted_edwards::Affine};
 use ark_ed_on_bls12_381::{
-    constraints::EdwardsVar as JubjubVar, EdwardsProjective as Jubjub, JubjubConfig,
+    EdwardsProjective as Jubjub, JubjubConfig, constraints::EdwardsVar as JubjubVar,
 };
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, ToConstraintField, UniformRand};
 use ark_r1cs_std::{
+    R1CSVar,
     alloc::{AllocVar, AllocationMode},
     boolean::Boolean,
     convert::{ToBitsGadget, ToConstraintFieldGadget},
@@ -24,7 +25,6 @@ use ark_r1cs_std::{
     fields::fp::FpVar,
     groups::CurveVar,
     select::CondSelectGadget,
-    R1CSVar,
 };
 use ark_relations::{
     ns,
@@ -183,7 +183,7 @@ impl Pubkey<F> for JJSchnorrPubkey {
 }
 
 impl JJSchnorrPrivkey {
-    fn gen(mut rng: impl Rng) -> JJSchnorrPrivkey {
+    fn new(mut rng: impl Rng) -> JJSchnorrPrivkey {
         JJSchnorrPrivkey(JubjubFr::rand(&mut rng))
     }
 
@@ -237,7 +237,7 @@ impl Privkey<F> for JJSchnorrPrivkey {
     type Pubkey = JJSchnorrPubkey;
 
     fn gen_ckey(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self::CompressedPrivKey {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn into_key(c: Self::CompressedPrivKey) -> Self {
@@ -245,7 +245,7 @@ impl Privkey<F> for JJSchnorrPrivkey {
     }
 
     fn gen_key(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn get_pubkey(&self) -> Self::Pubkey {
@@ -420,7 +420,7 @@ mod test {
         // of times.
         for _ in 0..100 {
             // Make a random privkey and message
-            let privkey = JJSchnorrPrivkey::gen(&mut rng);
+            let privkey = JJSchnorrPrivkey::new(&mut rng);
             let msg = BlsFr::rand(&mut rng);
 
             // Sign the random message under the random privkey
@@ -437,7 +437,7 @@ mod test {
             let cs = ConstraintSystem::<BlsFr>::new_ref();
 
             // Make a random keypair and message
-            let privkey = JJSchnorrPrivkey::gen(&mut rng);
+            let privkey = JJSchnorrPrivkey::new(&mut rng);
             let pubkey: JJSchnorrPubkey = (&privkey).into();
             let msg = BlsFr::rand(&mut rng);
             // Sign the message

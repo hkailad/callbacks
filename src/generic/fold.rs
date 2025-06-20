@@ -1,414 +1,23 @@
-use std::marker::PhantomData;
+use ark_relations::ns;
+use std::{borrow::Borrow, marker::PhantomData};
 
-use ark_r1cs_std::{convert::ToConstraintFieldGadget, select::CondSelectGadget};
+use ark_r1cs_std::{alloc::AllocationMode, select::CondSelectGadget};
 
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
-use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar};
-use ark_relations::r1cs::SynthesisError;
+use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget};
+use ark_relations::r1cs::{Namespace, SynthesisError};
 use folding_schemes::frontend::FCircuit;
 
 use crate::{
-    crypto::{
-        enc::{AECipherSigZK, CPACipher},
-        hash::FieldHash,
-    },
+    crypto::{enc::AECipherSigZK, hash::FieldHash},
     generic::{
-        callbacks::{CallbackCom, CallbackTicket},
-        scan::{scan_apply_method_zk, scan_method, PubScanArgsVar},
+        bulletin::PublicCallbackBul,
+        object::{Nul, NulVar},
+        scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, scan_apply_method_zk},
+        user::{User, UserData, UserVar},
     },
 };
-
-use crate::generic::{
-    bulletin::PublicCallbackBul,
-    callbacks::{CallbackComVar, CallbackTicketVar},
-    object::{Ser, SerVar, ZKFields, ZKFieldsVar},
-    scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs},
-    user::{User, UserData, UserVar},
-};
-
-/// Serialize elements into a foldable representation for use in PSE's folding-schemes.
-pub trait FoldSer<F: PrimeField, ArgsVar: AllocVar<Self, F>> {
-    /// Get the length of the serialized representation.
-    fn repr_len() -> usize;
-
-    /// Construct the serialized representation.
-    fn to_fold_repr(&self) -> Vec<Ser<F>>;
-
-    /// Construct the object from a serialized representation (deserialize).
-    fn from_fold_repr(ser: &[Ser<F>]) -> Self;
-
-    /// Deserialize the serialized representation into the object in-circuit.
-    fn from_fold_repr_zk(var: &[SerVar<F>]) -> Result<ArgsVar, SynthesisError>;
-
-    /// Construct the serialized representation in-circuit.
-    fn to_fold_repr_zk(var: &ArgsVar) -> Result<Vec<SerVar<F>>, SynthesisError>;
-}
-
-impl<F: PrimeField> FoldSer<F, FpVar<F>> for F {
-    fn repr_len() -> usize {
-        1
-    }
-
-    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<F>> {
-        vec![*self]
-    }
-
-    fn from_fold_repr(ser: &[crate::generic::object::Ser<F>]) -> Self {
-        ser[0]
-    }
-
-    fn from_fold_repr_zk(
-        var: &[crate::generic::object::SerVar<F>],
-    ) -> Result<FpVar<F>, SynthesisError> {
-        Ok(var[0].clone())
-    }
-
-    fn to_fold_repr_zk(
-        var: &FpVar<F>,
-    ) -> Result<Vec<crate::generic::object::SerVar<F>>, SynthesisError> {
-        Ok(vec![var.clone()])
-    }
-}
-
-/// A user which also can be converted into a foldable serialized representation.
-///
-/// This is necessary for a user to be foldable.
-pub trait FoldableUserData<F: PrimeField + Absorb>:
-    UserData<F> + FoldSer<F, Self::UserDataVar>
-{
-}
-
-impl<F: PrimeField> ZKFields<F> {
-    /// Deserialize the bookkeeping fields in a user from a folded representation.
-    pub fn deserialize(data: &[Ser<F>]) -> Self {
-        let ing = match data[5] {
-            t if t == F::from(0) => false,
-            t if t == F::from(1) => true,
-            _ => true,
-        };
-        Self {
-            nul: data[0],
-            com_rand: data[1],
-            callback_hash: data[2],
-            new_in_progress_callback_hash: data[3],
-            old_in_progress_callback_hash: data[4],
-            is_ingest_over: ing,
-        }
-    }
-}
-
-impl<F: PrimeField> ZKFieldsVar<F> {
-    /// Deserialize the bookkeeping fields from a folded representation in-circuit.
-    pub fn deserialize(data: &[SerVar<F>]) -> Result<Self, SynthesisError> {
-        Ok(Self {
-            nul: data[0].clone(),
-            com_rand: data[1].clone(),
-            callback_hash: data[2].clone(),
-            new_in_progress_callback_hash: data[3].clone(),
-            old_in_progress_callback_hash: data[4].clone(),
-            is_ingest_over: data[5].is_neq(&FpVar::Constant(F::ZERO))?,
-        })
-    }
-}
-
-impl<F: PrimeField> FoldSer<F, ZKFieldsVar<F>> for ZKFields<F> {
-    fn repr_len() -> usize {
-        6
-    }
-
-    fn to_fold_repr(&self) -> Vec<Ser<F>> {
-        self.serialize()
-    }
-
-    fn from_fold_repr(ser: &[Ser<F>]) -> Self {
-        Self::deserialize(ser)
-    }
-
-    fn from_fold_repr_zk(var: &[SerVar<F>]) -> Result<ZKFieldsVar<F>, SynthesisError> {
-        ZKFieldsVar::deserialize(var)
-    }
-
-    fn to_fold_repr_zk(var: &ZKFieldsVar<F>) -> Result<Vec<SerVar<F>>, SynthesisError> {
-        ZKFieldsVar::serialize(var)
-    }
-}
-
-impl<F: PrimeField + Absorb, U: FoldableUserData<F>> FoldSer<F, UserVar<F, U>> for User<F, U> {
-    fn repr_len() -> usize {
-        2 + U::repr_len() + <ZKFields<F>>::repr_len()
-    }
-
-    fn to_fold_repr(&self) -> Vec<Ser<F>> {
-        let mut ser = vec![
-            F::from(self.callbacks.len() as u64),
-            F::from((self.scan_index.unwrap_or(0)) as u64),
-        ];
-        ser.extend(self.data.to_fold_repr());
-        ser.extend(self.zk_fields.to_fold_repr());
-        ser
-    }
-
-    fn from_fold_repr(ser: &[Ser<F>]) -> Self {
-        let data = U::from_fold_repr(&ser[2..(2 + U::repr_len())]);
-        let zk_fields = ZKFields::from_fold_repr(&ser[(2 + U::repr_len())..]);
-        let mut cb_vec = vec![];
-        let mut ip_cbs = vec![];
-        for _ in 0..<F as Into<<F as PrimeField>::BigInt>>::into(ser[0]).as_ref()[0] {
-            cb_vec.push(vec![]);
-            ip_cbs.push(vec![]);
-        }
-        let scan_id = <F as Into<<F as PrimeField>::BigInt>>::into(ser[1]).as_ref()[0];
-
-        let index = if scan_id == 0 {
-            None
-        } else {
-            Some(scan_id as usize)
-        };
-
-        Self {
-            data,
-            zk_fields,
-            callbacks: cb_vec,
-            scan_index: index,
-            in_progress_cbs: ip_cbs,
-        }
-    }
-
-    fn from_fold_repr_zk(ser: &[SerVar<F>]) -> Result<UserVar<F, U>, SynthesisError> {
-        let data = U::from_fold_repr_zk(&ser[2..(2 + U::repr_len())])?;
-        let zk_fields = ZKFields::from_fold_repr_zk(&ser[(2 + U::repr_len())..])?;
-        Ok(UserVar { data, zk_fields })
-    }
-
-    fn to_fold_repr_zk(var: &UserVar<F, U>) -> Result<Vec<SerVar<F>>, SynthesisError> {
-        let mut servar = vec![FpVar::Constant(F::from(100)), FpVar::Constant(F::from(1))];
-        servar.extend(U::to_fold_repr_zk(&var.data)?);
-        servar.extend(<ZKFields<F>>::to_fold_repr_zk(&var.zk_fields)?);
-        Ok(servar)
-    }
-}
-
-impl<
-        F: PrimeField + Absorb,
-        CBArgs: Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > FoldSer<F, PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>>
-    for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
-where
-    Crypto::SigPK: FoldSer<F, Crypto::SigPKV>,
-    Crypto::EncKey: FoldSer<F, Crypto::EncKeyVar>,
-    Crypto::Ct: FoldSer<F, <Crypto::EncKey as CPACipher<F>>::CV>,
-    CBul::MembershipWitness: FoldSer<F, CBul::MembershipWitnessVar>,
-    CBul::NonMembershipWitness: FoldSer<F, CBul::NonMembershipWitnessVar>,
-{
-    fn from_fold_repr(ser: &[Ser<F>]) -> Self {
-        let mut lc = 0;
-
-        let mut ticket_vec = vec![];
-        let mut args_vec = vec![];
-        let mut times_vec = vec![];
-        let mut memb_vec = vec![];
-        let mut nmemb_vec = vec![];
-        for _ in 0..NUMCBS {
-            let tik = Crypto::SigPK::from_fold_repr(&ser[lc..(lc + Crypto::SigPK::repr_len())]);
-            lc += Crypto::SigPK::repr_len();
-            let cb_method_id = ser[lc];
-            lc += 1;
-            let expirable = ser[lc] != F::ZERO;
-            lc += 1;
-            let expiration = ser[lc];
-            lc += 1;
-            let enc_key =
-                Crypto::EncKey::from_fold_repr(&ser[lc..(lc + Crypto::EncKey::repr_len())]);
-            lc += Crypto::EncKey::repr_len();
-            let com_rand = ser[lc];
-            lc += 1;
-            let enc_args = Crypto::Ct::from_fold_repr(&ser[lc..(lc + Crypto::Ct::repr_len())]);
-            lc += Crypto::Ct::repr_len();
-            let post_times = ser[lc];
-            lc += 1;
-            let memb_priv = CBul::MembershipWitness::from_fold_repr(
-                &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
-            );
-            lc += CBul::MembershipWitness::repr_len();
-            let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr(
-                &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
-            );
-            lc += CBul::NonMembershipWitness::repr_len();
-
-            let cb_entry: CallbackTicket<F, CBArgs, Crypto> = CallbackTicket {
-                tik,
-                cb_method_id,
-                expirable,
-                expiration,
-                enc_key,
-            };
-
-            let priv_ticket = CallbackCom { cb_entry, com_rand };
-            ticket_vec.push(priv_ticket);
-            args_vec.push(enc_args);
-            times_vec.push(post_times);
-            memb_vec.push(memb_priv);
-            nmemb_vec.push(nmemb_priv);
-        }
-
-        PrivScanArgs {
-            priv_n_tickets: ticket_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Ticket length wrong.")),
-            enc_args: args_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Args length wrong.")),
-            post_times: times_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Times length wrong.")),
-            memb_priv: memb_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Membership data length wrong.")),
-            nmemb_priv: nmemb_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Nonmembership data length wrong.")),
-        }
-    }
-
-    fn from_fold_repr_zk(
-        ser: &[SerVar<F>],
-    ) -> Result<PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>, SynthesisError> {
-        let mut lc = 0;
-
-        let mut ticket_vec = vec![];
-        let mut args_vec = vec![];
-        let mut times_vec = vec![];
-        let mut memb_vec = vec![];
-        let mut nmemb_vec = vec![];
-
-        for _ in 0..NUMCBS {
-            let tik = Crypto::SigPK::from_fold_repr_zk(&ser[lc..(lc + Crypto::SigPK::repr_len())])?;
-            lc += Crypto::SigPK::repr_len();
-            let cb_method_id = ser[lc].clone();
-            lc += 1;
-            let expirable = ser[lc].is_neq(&FpVar::Constant(F::ZERO))?;
-            lc += 1;
-            let expiration = ser[lc].clone();
-            lc += 1;
-            let enc_key =
-                Crypto::EncKey::from_fold_repr_zk(&ser[lc..(lc + Crypto::EncKey::repr_len())])?;
-            lc += Crypto::EncKey::repr_len();
-            let com_rand = ser[lc].clone();
-            lc += 1;
-            let enc_args = Crypto::Ct::from_fold_repr_zk(&ser[lc..(lc + Crypto::Ct::repr_len())])?;
-            lc += Crypto::Ct::repr_len();
-            let post_times = ser[lc].clone();
-            lc += 1;
-            let memb_priv = CBul::MembershipWitness::from_fold_repr_zk(
-                &ser[lc..(lc + CBul::MembershipWitness::repr_len())],
-            )?;
-            lc += CBul::MembershipWitness::repr_len();
-            let nmemb_priv = CBul::NonMembershipWitness::from_fold_repr_zk(
-                &ser[lc..(lc + CBul::NonMembershipWitness::repr_len())],
-            )?;
-
-            lc += CBul::NonMembershipWitness::repr_len();
-
-            let cb_entry: CallbackTicketVar<F, CBArgs, Crypto> = CallbackTicketVar {
-                tik,
-                cb_method_id,
-                expirable,
-                expiration,
-                enc_key,
-            };
-
-            let priv_ticket = CallbackComVar { cb_entry, com_rand };
-            ticket_vec.push(priv_ticket);
-            args_vec.push(enc_args);
-            times_vec.push(post_times);
-            memb_vec.push(memb_priv);
-            nmemb_vec.push(nmemb_priv);
-        }
-
-        Ok(PrivScanArgsVar {
-            priv_n_tickets: ticket_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Ticket length wrong.")),
-            enc_args: args_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Args length wrong.")),
-            post_times: times_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Times length wrong.")),
-            memb_priv: memb_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Membership data length wrong.")),
-            nmemb_priv: nmemb_vec
-                .try_into()
-                .unwrap_or_else(|_| panic!("Nonmembership data length wrong.")),
-        })
-    }
-
-    fn repr_len() -> usize {
-        NUMCBS
-            * (Crypto::SigPK::repr_len()
-                + 1
-                + 1
-                + 1
-                + Crypto::EncKey::repr_len()
-                + 1
-                + Crypto::Ct::repr_len()
-                + 1
-                + CBul::MembershipWitness::repr_len()
-                + CBul::NonMembershipWitness::repr_len())
-    }
-
-    fn to_fold_repr(&self) -> Vec<Ser<F>> {
-        let mut ser: Vec<F> = vec![];
-        for i in 0..NUMCBS {
-            ser.extend(self.priv_n_tickets[i].cb_entry.tik.to_fold_repr());
-            ser.push(self.priv_n_tickets[i].cb_entry.cb_method_id);
-            ser.push(F::from(self.priv_n_tickets[i].cb_entry.expirable));
-            ser.push(self.priv_n_tickets[i].cb_entry.expiration);
-            ser.extend(self.priv_n_tickets[i].cb_entry.enc_key.to_fold_repr());
-            ser.push(self.priv_n_tickets[i].com_rand);
-            ser.extend(self.enc_args[i].to_fold_repr());
-            ser.push(self.post_times[i]);
-            ser.extend(self.memb_priv[i].to_fold_repr());
-            ser.extend(self.nmemb_priv[i].to_fold_repr());
-        }
-        ser
-    }
-
-    fn to_fold_repr_zk(
-        var: &PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>,
-    ) -> Result<Vec<SerVar<F>>, SynthesisError> {
-        let mut ser: Vec<SerVar<F>> = vec![];
-        for i in 0..NUMCBS {
-            ser.extend(Crypto::SigPK::to_fold_repr_zk(
-                &var.priv_n_tickets[i].cb_entry.tik,
-            )?);
-            ser.push(var.priv_n_tickets[i].cb_entry.cb_method_id.clone());
-            ser.extend(
-                var.priv_n_tickets[i]
-                    .cb_entry
-                    .expirable
-                    .to_constraint_field()?,
-            );
-            ser.push(var.priv_n_tickets[i].cb_entry.expiration.clone());
-            ser.extend(Crypto::EncKey::to_fold_repr_zk(
-                &var.priv_n_tickets[i].cb_entry.enc_key,
-            )?);
-            ser.push(var.priv_n_tickets[i].com_rand.clone());
-            ser.extend(Crypto::Ct::to_fold_repr_zk(&var.enc_args[i])?);
-            ser.push(var.post_times[i].clone());
-            ser.extend(CBul::MembershipWitness::to_fold_repr_zk(&var.memb_priv[i])?);
-            ser.extend(CBul::NonMembershipWitness::to_fold_repr_zk(
-                &var.nmemb_priv[i],
-            )?);
-        }
-        Ok(ser)
-    }
-}
 
 /// This allows for users to perform a folding scan instead of scanning incremenetally.
 ///
@@ -440,40 +49,183 @@ pub struct FoldingScan<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone + std::fmt::Debug,
-        CBArgsVar: AllocVar<CBArgs, F> + Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        H: FieldHash<F>,
-        const NUMCBS: usize,
-    > std::fmt::Debug for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone + std::fmt::Debug,
+    CBArgsVar: AllocVar<CBArgs, F> + Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    H: FieldHash<F>,
+    const NUMCBS: usize,
+> std::fmt::Debug for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Folding scan")
     }
 }
 
+/// An external input to a single folding step. TODO
+#[derive(Clone)]
+pub struct FoldInput<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + Default,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> where
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
+{
+    /// The user. TODO
+    pub user: User<F, U>,
+    /// Scan args. TODO
+    pub scan_args: PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>,
+    /// New nullifier. TODO
+    pub nul: Nul<F>,
+}
+
 impl<
-        F: PrimeField + Absorb,
-        U: FoldableUserData<F>,
-        CBArgs: Clone + std::fmt::Debug,
-        CBArgsVar: AllocVar<CBArgs, F> + Clone,
-        Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto> + Clone + std::fmt::Debug,
-        H: FieldHash<F>,
-        const NUMCBS: usize,
-    > FCircuit<F> for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + Default,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> Default for FoldInput<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 where
-    Crypto::SigPK: FoldSer<F, Crypto::SigPKV>,
-    Crypto::EncKey: FoldSer<F, Crypto::EncKeyVar>,
-    Crypto::Ct: FoldSer<F, <Crypto::EncKey as CPACipher<F>>::CV>,
-    CBul::MembershipWitness: FoldSer<F, CBul::MembershipWitnessVar>,
-    CBul::NonMembershipWitness: FoldSer<F, CBul::NonMembershipWitnessVar>,
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
+{
+    fn default() -> Self {
+        Self {
+            user: <User<F, U>>::default(),
+            scan_args: PrivScanArgs::default(),
+            nul: Nul::default(),
+        }
+    }
+}
+
+impl<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + Default,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for FoldInput<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+where
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Folding input")
+    }
+}
+
+/// An external input to a single folding step in-circuit. TODO
+#[derive(Clone)]
+pub struct FoldInputVar<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> {
+    /// The user. TODO
+    pub user: UserVar<F, U>,
+    /// Scan args. TODO
+    pub scan_args: PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>,
+    /// New nullifier. TODO
+    pub nul: NulVar<F>,
+}
+
+impl<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + Default,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for FoldInputVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+where
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Folding input var")
+    }
+}
+
+impl<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + Default,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> AllocVar<FoldInput<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>, F>
+    for FoldInputVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+where
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
+{
+    fn new_variable<T: Borrow<FoldInput<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>>>(
+        cs: impl Into<Namespace<F>>,
+        f: impl FnOnce() -> Result<T, SynthesisError>,
+        mode: AllocationMode,
+    ) -> Result<Self, SynthesisError> {
+        let ns = cs.into();
+        let cs = ns.cs();
+        let res = f();
+
+        res.and_then(|rec| {
+            let rec = rec.borrow();
+            let user =
+                <UserVar<F, U>>::new_variable(ns!(cs, "user"), || Ok(rec.user.clone()), mode)?;
+            let scan_args = PrivScanArgsVar::new_variable(
+                ns!(cs, "scan_args"),
+                || Ok(rec.scan_args.clone()),
+                mode,
+            )?;
+
+            let nul = <NulVar<F>>::new_variable(ns!(cs, "nul"), || Ok(rec.nul.clone()), mode)?;
+            Ok(Self {
+                user,
+                scan_args,
+                nul,
+            })
+        })
+    }
+}
+
+impl<
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    CBArgs: Clone + std::fmt::Debug + Default,
+    CBArgsVar: AllocVar<CBArgs, F> + Clone + std::fmt::Debug,
+    Crypto: AECipherSigZK<F, CBArgs, AV = CBArgsVar> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto> + Clone + std::fmt::Debug + Default,
+    H: FieldHash<F>,
+    const NUMCBS: usize,
+> FCircuit<F> for FoldingScan<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>
+where
+    CBul::MembershipWitness: Default,
+    CBul::NonMembershipWitness: Default,
     U::UserDataVar: CondSelectGadget<F> + EqGadget<F>,
 {
     type Params = PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>;
+
+    type ExternalInputs = FoldInput<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>;
+
+    type ExternalInputsVar = FoldInputVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>;
 
     fn new(init: Self::Params) -> Result<Self, folding_schemes::Error> {
         Ok(Self {
@@ -489,30 +241,6 @@ where
         1
     }
 
-    fn external_inputs_len(&self) -> usize {
-        User::<F, U>::repr_len() + <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::repr_len()
-    }
-
-    fn step_native(
-        // this method uses self, so that each FCircuit implementation (and different frontends)
-        // can hold a state if needed to store data to compute the next state.
-        &self,
-        _i: usize,
-        _z_i: Vec<F>,
-        external_inputs: Vec<F>, // inputs that are not part of the state
-    ) -> Result<Vec<F>, folding_schemes::Error> {
-        let u = User::<F, U>::from_fold_repr(&external_inputs[0..User::<F, U>::repr_len()]);
-        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::from_fold_repr(
-            &external_inputs[User::<F, U>::repr_len()..],
-        );
-        let new_user = scan_method::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
-            &u,
-            self.const_args.clone(),
-            priv_args,
-        );
-        Ok(vec![new_user.commit::<H>()])
-    }
-
     fn generate_step_constraints(
         // this method uses self, so that each FCircuit implementation (and different frontends)
         // can hold a state if needed to store data to generate the constraints.
@@ -520,17 +248,16 @@ where
         cs: ark_relations::r1cs::ConstraintSystemRef<F>,
         _i: usize,
         z_i: Vec<ark_r1cs_std::fields::fp::FpVar<F>>,
-        external_inputs: Vec<ark_r1cs_std::fields::fp::FpVar<F>>, // inputs that are not part of the state
+        external_inputs: Self::ExternalInputsVar, // inputs that are not part of the state
     ) -> Result<Vec<ark_r1cs_std::fields::fp::FpVar<F>>, ark_relations::r1cs::SynthesisError> {
-        let u = User::<F, U>::from_fold_repr_zk(&external_inputs[0..User::<F, U>::repr_len()])?;
-        User::commit_in_zk::<H>(u.clone())?.enforce_equal(&z_i[0])?;
-        let priv_args = <PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>::from_fold_repr_zk(
-            &external_inputs[User::<F, U>::repr_len()..],
-        )?;
+        User::commit_in_zk::<H>(external_inputs.user.clone())?.enforce_equal(&z_i[0])?;
         let p = PubScanArgsVar::new_constant(cs.clone(), self.const_args.clone())?;
-        let new_user = scan_apply_method_zk::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
-            &u, p, priv_args,
+        let mut new_user = scan_apply_method_zk::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
+            &external_inputs.user,
+            p,
+            external_inputs.scan_args,
         )?;
+        new_user.zk_fields.nul = external_inputs.nul;
         Ok(vec![User::commit_in_zk::<H>(new_user)?])
     }
 }

@@ -25,7 +25,7 @@ use ark_relations::{
     r1cs::{Namespace, SynthesisError},
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngCore, distributions::Standard, prelude::Distribution};
 use std::borrow::Borrow;
 
 /// A callback ticket consists of all the data stored within a user associated to a callback.
@@ -319,7 +319,7 @@ where
         .map(|(i, cb)| {
             let (rand, ticket_value) = rpk_identities[i].rerand(rng);
             let enc_key = Crypto::EncKey::keygen(rng);
-            let com_rand = rng.gen::<F>();
+            let com_rand = rng.r#gen::<F>();
 
             let cb_data: CallbackTicket<F, CBArgs, Crypto> = CallbackTicket {
                 tik: ticket_value,

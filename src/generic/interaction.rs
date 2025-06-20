@@ -2,9 +2,9 @@ use crate::{
     crypto::{enc::AECipherSigZK, hash::FieldHash},
     generic::{
         bulletin::{PublicCallbackBul, PublicUserBul},
-        callbacks::{add_ticket_to_hc_zk, create_defaults, CallbackCom, CallbackComVar},
+        callbacks::{CallbackCom, CallbackComVar, add_ticket_to_hc_zk, create_defaults},
         object::{Com, ComVar, Id, Nul, NulVar, Time},
-        scan::{get_scan_interaction, PubScanArgs},
+        scan::{PubScanArgs, get_scan_interaction},
         user::{User, UserData, UserVar},
     },
     util::ArrayVar,
@@ -19,8 +19,8 @@ use ark_relations::{
 use ark_snark::SNARK;
 use core::marker::PhantomData;
 use rand::{
-    distributions::{Distribution, Standard},
     CryptoRng, RngCore,
+    distributions::{Distribution, Standard},
 };
 
 /// A predicate.
@@ -385,16 +385,16 @@ pub struct Interaction<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F> + Default,
-        PubArgs: Clone + Default + std::fmt::Debug,
-        PubArgsVar: AllocVar<PubArgs, F> + Clone,
-        PrivArgs: Clone + Default + std::fmt::Debug,
-        PrivArgsVar: AllocVar<PrivArgs, F> + Clone,
-        CBArgs: Clone + Default + std::fmt::Debug,
-        CBArgsVar: AllocVar<CBArgs, F> + Clone,
-        const NUMCBS: usize,
-    > Interaction<F, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, CBArgs, CBArgsVar, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F> + Default,
+    PubArgs: Clone + Default + std::fmt::Debug,
+    PubArgsVar: AllocVar<PubArgs, F> + Clone,
+    PrivArgs: Clone + Default + std::fmt::Debug,
+    PrivArgsVar: AllocVar<PrivArgs, F> + Clone,
+    CBArgs: Clone + Default + std::fmt::Debug,
+    CBArgsVar: AllocVar<CBArgs, F> + Clone,
+    const NUMCBS: usize,
+> Interaction<F, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, CBArgs, CBArgsVar, NUMCBS>
 where
     Standard: Distribution<F>,
 {
@@ -580,19 +580,19 @@ pub struct ExecMethodCircuit<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        H: FieldHash<F>,
-        U: UserData<F>,
-        PubArgs: Clone + std::fmt::Debug,
-        PubArgsVar: AllocVar<PubArgs, F>,
-        PrivArgs: Clone + std::fmt::Debug,
-        PrivArgsVar: AllocVar<PrivArgs, F>,
-        CBArgs: Clone + std::fmt::Debug,
-        CBArgsVar: AllocVar<CBArgs, F>,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        Bul: PublicUserBul<F, U>,
-        const NUMCBS: usize,
-    > ConstraintSynthesizer<F>
+    F: PrimeField + Absorb,
+    H: FieldHash<F>,
+    U: UserData<F>,
+    PubArgs: Clone + std::fmt::Debug,
+    PubArgsVar: AllocVar<PubArgs, F>,
+    PrivArgs: Clone + std::fmt::Debug,
+    PrivArgsVar: AllocVar<PrivArgs, F>,
+    CBArgs: Clone + std::fmt::Debug,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    Bul: PublicUserBul<F, U>,
+    const NUMCBS: usize,
+> ConstraintSynthesizer<F>
     for ExecMethodCircuit<
         F,
         H,
@@ -709,19 +709,19 @@ impl<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        H: FieldHash<F>,
-        U: UserData<F>,
-        PubArgs: Clone,
-        PubArgsVar: AllocVar<PubArgs, F> + Clone,
-        PrivArgs: Clone,
-        PrivArgsVar: AllocVar<PrivArgs, F> + Clone,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F> + Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        Bul: PublicUserBul<F, U>,
-        const NUMCBS: usize,
-    > Clone
+    F: PrimeField + Absorb,
+    H: FieldHash<F>,
+    U: UserData<F>,
+    PubArgs: Clone,
+    PubArgsVar: AllocVar<PubArgs, F> + Clone,
+    PrivArgs: Clone,
+    PrivArgsVar: AllocVar<PrivArgs, F> + Clone,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F> + Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    Bul: PublicUserBul<F, U>,
+    const NUMCBS: usize,
+> Clone
     for ExecMethodCircuit<
         F,
         H,
@@ -868,13 +868,13 @@ pub struct ProvePredicateCircuit<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        PubArgs: Clone,
-        PubArgsVar: AllocVar<PubArgs, F>,
-        PrivArgs: Clone,
-        PrivArgsVar: AllocVar<PrivArgs, F>,
-    > ConstraintSynthesizer<F>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    PubArgs: Clone,
+    PubArgsVar: AllocVar<PubArgs, F>,
+    PrivArgs: Clone,
+    PrivArgsVar: AllocVar<PrivArgs, F>,
+> ConstraintSynthesizer<F>
     for ProvePredicateCircuit<F, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar>
 {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> ArkResult<()> {
@@ -1021,15 +1021,15 @@ pub struct ProvePredInCircuit<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        H: FieldHash<F>,
-        U: UserData<F>,
-        PubArgs: Clone,
-        PubArgsVar: AllocVar<PubArgs, F>,
-        PrivArgs: Clone,
-        PrivArgsVar: AllocVar<PrivArgs, F>,
-        Bul: PublicUserBul<F, U>,
-    > Clone for ProvePredInCircuit<F, H, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, Bul>
+    F: PrimeField + Absorb,
+    H: FieldHash<F>,
+    U: UserData<F>,
+    PubArgs: Clone,
+    PubArgsVar: AllocVar<PubArgs, F>,
+    PrivArgs: Clone,
+    PrivArgsVar: AllocVar<PrivArgs, F>,
+    Bul: PublicUserBul<F, U>,
+> Clone for ProvePredInCircuit<F, H, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, Bul>
 {
     fn clone(&self) -> Self {
         Self {
@@ -1046,15 +1046,15 @@ impl<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        H: FieldHash<F>,
-        U: UserData<F>,
-        PubArgs: Clone,
-        PubArgsVar: AllocVar<PubArgs, F>,
-        PrivArgs: Clone,
-        PrivArgsVar: AllocVar<PrivArgs, F>,
-        Bul: PublicUserBul<F, U>,
-    > ConstraintSynthesizer<F>
+    F: PrimeField + Absorb,
+    H: FieldHash<F>,
+    U: UserData<F>,
+    PubArgs: Clone,
+    PubArgsVar: AllocVar<PubArgs, F>,
+    PrivArgs: Clone,
+    PrivArgsVar: AllocVar<PrivArgs, F>,
+    Bul: PublicUserBul<F, U>,
+> ConstraintSynthesizer<F>
     for ProvePredInCircuit<F, H, U, PubArgs, PubArgsVar, PrivArgs, PrivArgsVar, Bul>
 {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> ArkResult<()> {

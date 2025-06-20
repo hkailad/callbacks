@@ -79,7 +79,7 @@ pub trait RRSigner<S, M, R, V: RRVerifier<S, M, R>> {
     fn sk_to_pk(&self) -> V;
 
     /// Generate a new random secret key.
-    fn gen(rng: &mut (impl CryptoRng + RngCore)) -> Self;
+    fn new(rng: &mut (impl CryptoRng + RngCore)) -> Self;
 
     /// Given some randomness `R`, output the new secret key `r * sk` given by rerandomizing the
     /// current secret key.

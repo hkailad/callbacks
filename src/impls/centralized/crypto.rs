@@ -2,10 +2,6 @@ use crate::crypto::{
     enc::{AECipherSigZK, CPACipher},
     rr::{RRSigner, RRVerifier},
 };
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-use crate::generic::fold::FoldSer;
 use ark_ff::PrimeField;
 use ark_r1cs_std::{
     fields::fp::FpVar,
@@ -18,8 +14,8 @@ use ark_relations::{
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
 use core::borrow::Borrow;
 use rand::{
-    distributions::{Distribution, Standard},
     CryptoRng, Rng, RngCore,
+    distributions::{Distribution, Standard},
 };
 use std::marker::PhantomData;
 
@@ -95,7 +91,7 @@ where
     }
 
     fn rerand(&self, rng: &mut (impl CryptoRng + RngCore)) -> (F, Self) {
-        let mut out: F = rng.gen();
+        let mut out: F = rng.r#gen();
         while out > F::from_bigint(F::MODULUS_MINUS_ONE_DIV_TWO).unwrap() {
             out -= F::from_bigint(F::MODULUS_MINUS_ONE_DIV_TWO).unwrap();
         }
@@ -115,7 +111,7 @@ where
     type KeyVar = PlainTikCryptoVar<F>;
 
     fn keygen(rng: &mut (impl CryptoRng + RngCore)) -> Self {
-        let mut f: F = rng.gen();
+        let mut f: F = rng.r#gen();
         while f > F::from_bigint(F::MODULUS_MINUS_ONE_DIV_TWO).unwrap() {
             f -= F::from_bigint(F::MODULUS_MINUS_ONE_DIV_TWO).unwrap();
         }
@@ -139,7 +135,7 @@ impl<F: PrimeField, A> RRSigner<(), A, F, PlainTikCrypto<F>> for PlainTikCrypto<
 where
     Standard: Distribution<F>,
 {
-    fn gen(_rng: &mut (impl CryptoRng + RngCore)) -> Self {
+    fn new(_rng: &mut (impl CryptoRng + RngCore)) -> Self {
         PlainTikCrypto(F::zero())
     }
 
@@ -220,35 +216,6 @@ where
     type EncKeyVar = OTPEncKeyVar<F>;
 
     type Rand = F;
-}
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-impl<F: PrimeField> FoldSer<F, PlainTikCryptoVar<F>> for PlainTikCrypto<F> {
-    fn repr_len() -> usize {
-        1
-    }
-
-    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<F>> {
-        vec![self.0]
-    }
-
-    fn from_fold_repr(ser: &[crate::generic::object::Ser<F>]) -> Self {
-        PlainTikCrypto(ser[0])
-    }
-
-    fn from_fold_repr_zk(
-        var: &[crate::generic::object::SerVar<F>],
-    ) -> Result<PlainTikCryptoVar<F>, SynthesisError> {
-        Ok(PlainTikCryptoVar(var[0].clone()))
-    }
-
-    fn to_fold_repr_zk(
-        var: &PlainTikCryptoVar<F>,
-    ) -> Result<Vec<crate::generic::object::SerVar<F>>, SynthesisError> {
-        Ok(vec![var.0.clone()])
-    }
 }
 
 /// A cipher which does no encryption. This is for centralized settings when encryption is not

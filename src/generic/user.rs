@@ -2,7 +2,7 @@ use crate::{
     crypto::{enc::AECipherSigZK, hash::FieldHash},
     generic::{
         bulletin::PublicUserBul,
-        callbacks::{add_ticket_to_hc, create_cbs_from_interaction, CallbackCom},
+        callbacks::{CallbackCom, add_ticket_to_hc, create_cbs_from_interaction},
         interaction::{
             ExecMethodCircuit, Interaction, ProvePredInCircuit, ProvePredicateCircuit,
             SingularPredicate,
@@ -27,7 +27,7 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
 };
 use ark_snark::SNARK;
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngCore, distributions::Standard, prelude::Distribution};
 use std::{
     borrow::Borrow,
     io::{Read, Write},
@@ -35,7 +35,7 @@ use std::{
 
 use crate::generic::{
     bulletin::PublicCallbackBul,
-    scan::{get_scan_interaction, PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar},
+    scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, get_scan_interaction},
 };
 
 use crate::generic::interaction::Callback;
@@ -309,6 +309,18 @@ pub struct User<F: PrimeField + Absorb, U: UserData<F>> {
     pub(crate) in_progress_cbs: Vec<Vec<u8>>,
 }
 
+impl<F: PrimeField + Absorb, U: UserData<F> + Default> Default for User<F, U> {
+    fn default() -> Self {
+        Self {
+            data: U::default(),
+            zk_fields: ZKFields::default(),
+            callbacks: vec![],
+            scan_index: None,
+            in_progress_cbs: vec![],
+        }
+    }
+}
+
 impl<F: PrimeField + Absorb, U: UserData<F>> CanonicalSerialize for User<F, U>
 where
     U: CanonicalSerialize,
@@ -399,7 +411,7 @@ where
 /// In-circuit representation of the user object.
 ///
 /// Consists of both user data in circuit, along with the extra zero knowledge fields.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UserVar<F: PrimeField + Absorb, U: UserData<F>> {
     /// User data, in-circuit.
     pub data: U::UserDataVar,
@@ -537,8 +549,8 @@ where
         Self {
             data: user,
             zk_fields: ZKFields {
-                nul: rng.gen(),
-                com_rand: rng.gen(),
+                nul: rng.r#gen(),
+                com_rand: rng.r#gen(),
                 callback_hash: F::zero(),
                 new_in_progress_callback_hash: F::zero(),
                 old_in_progress_callback_hash: F::zero(),
@@ -979,8 +991,8 @@ where
 
         // (B) update the new users zk fields properly
 
-        new_user.zk_fields.nul = rng.gen();
-        new_user.zk_fields.com_rand = rng.gen();
+        new_user.zk_fields.nul = rng.r#gen();
+        new_user.zk_fields.com_rand = rng.r#gen();
 
         let cb_tik_list: [(CallbackCom<F, CBArgs, Crypto>, Crypto::Rand); NUMCBS] =
             create_cbs_from_interaction(rng, method.clone(), rpks, cur_time);
@@ -1139,8 +1151,8 @@ where
 
         // (B) update the new users zk fields properly
 
-        new_user.zk_fields.nul = rng.gen();
-        new_user.zk_fields.com_rand = rng.gen();
+        new_user.zk_fields.nul = rng.r#gen();
+        new_user.zk_fields.com_rand = rng.r#gen();
 
         let cb_tik_list: [(CallbackCom<F, CBArgs, Crypto>, Crypto::Rand); NUMCBS] =
             create_cbs_from_interaction(rng, method.clone(), rpks, cur_time);
@@ -1269,8 +1281,8 @@ where
 
         // (B) update the new users zk fields properly
 
-        new_user.zk_fields.nul = rng.gen();
-        new_user.zk_fields.com_rand = rng.gen();
+        new_user.zk_fields.nul = rng.r#gen();
+        new_user.zk_fields.com_rand = rng.r#gen();
 
         let cb_tik_list: [(CallbackCom<F, CBArgs, Crypto>, Crypto::Rand); NUMCBS] =
             create_cbs_from_interaction(rng, method.clone(), rpks, cur_time);
@@ -2464,6 +2476,12 @@ where
 
         Ok(ppcirc)
     }
+
+    /// TODO.
+    #[cfg(feature = "folding")]
+    #[cfg(any(feature = "folding", doc))]
+    #[doc(cfg(feature = "folding"))]
+    pub fn scan_and_create_fold_proof_inputs() {}
 }
 
 impl<F: PrimeField + Absorb, U: UserData<F>> User<F, U> {

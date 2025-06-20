@@ -16,7 +16,7 @@ use crate::{
 
 use crate::generic::{
     bulletin::PublicCallbackBul,
-    callbacks::{add_ticket_to_hc_zk, CallbackCom, CallbackComVar},
+    callbacks::{CallbackCom, CallbackComVar, add_ticket_to_hc_zk},
     interaction::Callback,
     object::{Time, TimeVar},
     user::{User, UserData, UserVar},
@@ -130,14 +130,14 @@ pub struct PubScanArgs<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F>,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto> + Default,
-        const NUMCBS: usize,
-    > Default for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto> + Default,
+    const NUMCBS: usize,
+> Default for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 where
     CBul::MembershipPub: Default,
     CBul::NonMembershipPub: Default,
@@ -156,14 +156,14 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F>,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > std::fmt::Debug for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Public Scan Arguments")
@@ -171,14 +171,14 @@ impl<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F>,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > ToConstraintField<F> for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> ToConstraintField<F> for PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 where
     CBul::MembershipPub: ToConstraintField<F>,
     CBul::NonMembershipPub: ToConstraintField<F>,
@@ -227,14 +227,14 @@ pub struct PubScanArgsVar<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F>,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > std::fmt::Debug for PubScanArgsVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F>,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for PubScanArgsVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Public Scan Arguments in ZK")
@@ -242,14 +242,14 @@ impl<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        U: UserData<F>,
-        CBArgs: Clone,
-        CBArgsVar: AllocVar<CBArgs, F> + Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > AllocVar<PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>, F>
+    F: PrimeField + Absorb,
+    U: UserData<F>,
+    CBArgs: Clone,
+    CBArgsVar: AllocVar<CBArgs, F> + Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> AllocVar<PubScanArgs<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>, F>
     for PubScanArgsVar<F, U, CBArgs, CBArgsVar, Crypto, CBul, NUMCBS>
 {
     fn new_variable<
@@ -439,7 +439,6 @@ impl<
 ///
 /// }
 /// ```
-#[derive(Clone)]
 pub struct PrivScanArgs<
     F: PrimeField + Absorb,
     CBArgs: Clone,
@@ -464,12 +463,34 @@ pub struct PrivScanArgs<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        CBArgs: Clone + Default,
-        Crypto: AECipherSigZK<F, CBArgs> + Default,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > Default for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    CBArgs: Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> Clone for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
+where
+    CBul::MembershipWitness: Clone,
+    CBul::NonMembershipWitness: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            priv_n_tickets: core::array::from_fn(|i| self.priv_n_tickets[i].clone()),
+            enc_args: core::array::from_fn(|i| self.enc_args[i].clone()),
+            post_times: core::array::from_fn(|i| self.post_times[i].clone()),
+            memb_priv: core::array::from_fn(|i| self.memb_priv[i].clone()),
+            nmemb_priv: core::array::from_fn(|i| self.nmemb_priv[i].clone()),
+        }
+    }
+}
+
+impl<
+    F: PrimeField + Absorb,
+    CBArgs: Clone + Default,
+    Crypto: AECipherSigZK<F, CBArgs> + Default,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> Default for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
 where
     CBul::MembershipWitness: Default,
     CBul::NonMembershipWitness: Default,
@@ -488,12 +509,12 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        CBArgs: Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > std::fmt::Debug for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    CBArgs: Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Private Scan Arguments")
@@ -524,12 +545,12 @@ pub struct PrivScanArgsVar<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        CBArgs: Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > std::fmt::Debug for PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>
+    F: PrimeField + Absorb,
+    CBArgs: Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> std::fmt::Debug for PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Private Scan Arguments in ZK")
@@ -537,12 +558,12 @@ impl<
 }
 
 impl<
-        F: PrimeField + Absorb,
-        CBArgs: Clone,
-        Crypto: AECipherSigZK<F, CBArgs>,
-        CBul: PublicCallbackBul<F, CBArgs, Crypto>,
-        const NUMCBS: usize,
-    > AllocVar<PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>, F>
+    F: PrimeField + Absorb,
+    CBArgs: Clone,
+    Crypto: AECipherSigZK<F, CBArgs>,
+    CBul: PublicCallbackBul<F, CBArgs, Crypto>,
+    const NUMCBS: usize,
+> AllocVar<PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>, F>
     for PrivScanArgsVar<F, CBArgs, Crypto, CBul, NUMCBS>
 {
     fn new_variable<T: std::borrow::Borrow<PrivScanArgs<F, CBArgs, Crypto, CBul, NUMCBS>>>(

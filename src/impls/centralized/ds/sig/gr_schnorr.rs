@@ -12,8 +12,9 @@ use crate::{
 };
 use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, ToConstraintField, UniformRand};
-use ark_grumpkin::{constraints::GVar, Fq, Fr as F, Projective as G};
+use ark_grumpkin::{Fq, Fr as F, Projective as G, constraints::GVar};
 use ark_r1cs_std::{
+    R1CSVar,
     alloc::{AllocVar, AllocationMode},
     boolean::Boolean,
     convert::{ToBitsGadget, ToBytesGadget, ToConstraintFieldGadget},
@@ -22,7 +23,6 @@ use ark_r1cs_std::{
     groups::CurveVar,
     select::CondSelectGadget,
     uint8::UInt8,
-    R1CSVar,
 };
 use ark_relations::{
     ns,
@@ -31,11 +31,6 @@ use ark_relations::{
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand::Rng;
 use std::borrow::Borrow;
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-use crate::generic::fold::FoldSer;
 
 type FV = FpVar<Fq>;
 
@@ -85,67 +80,6 @@ pub struct GRSchnorrSignatureVar {
     e: Vec<UInt8<Fq>>,
     /// Response to challenge
     s: Vec<UInt8<Fq>>,
-}
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-impl FoldSer<Fq, GRSchnorrSignatureVar> for GRSchnorrSignature {
-    fn repr_len() -> usize {
-        F::default().serialized_size(ark_serialize::Compress::No) * 2
-    }
-
-    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<Fq>> {
-        let mut r1: Vec<u8> = Vec::new();
-        self.s.serialize_compressed(&mut r1).unwrap();
-
-        let mut r2: Vec<u8> = Vec::new();
-        self.e.serialize_compressed(&mut r2).unwrap();
-
-        r1.iter()
-            .map(|&x| Fq::from(x))
-            .chain(r2.iter().map(|&x| Fq::from(x)))
-            .collect()
-    }
-
-    fn from_fold_repr(ser: &[crate::generic::object::Ser<Fq>]) -> Self {
-        let x = ser
-            .iter()
-            .map(|x| x.into_bigint().0[0].try_into().unwrap())
-            .collect::<Vec<u8>>();
-
-        let reader = &*x;
-
-        let s = F::deserialize_compressed(reader).unwrap();
-
-        let e = F::deserialize_compressed(reader).unwrap();
-
-        Self { e, s }
-    }
-
-    fn from_fold_repr_zk(
-        var: &[crate::generic::object::SerVar<Fq>],
-    ) -> Result<GRSchnorrSignatureVar, SynthesisError> {
-        let x = var
-            .iter()
-            .map(|x| UInt8::from_fp(x).unwrap().0)
-            .collect::<Vec<UInt8<Fq>>>();
-
-        let e = x[0..(Self::repr_len() / 2)].to_vec();
-        let s = x[(Self::repr_len() / 2)..].to_vec();
-        Ok(GRSchnorrSignatureVar { e, s })
-    }
-
-    fn to_fold_repr_zk(
-        var: &GRSchnorrSignatureVar,
-    ) -> Result<Vec<crate::generic::object::SerVar<Fq>>, SynthesisError> {
-        Ok(var
-            .e
-            .iter()
-            .map(|x| x.to_fp().unwrap())
-            .chain(var.s.iter().map(|x| x.to_fp().unwrap()))
-            .collect())
-    }
 }
 
 impl AllocVar<GRSchnorrSignature, Fq> for GRSchnorrSignatureVar {
@@ -242,7 +176,7 @@ impl Pubkey<Fq> for GRSchnorrPubkey {
 }
 
 impl GRSchnorrPrivkey {
-    fn gen(mut rng: impl Rng) -> GRSchnorrPrivkey {
+    fn new(mut rng: impl Rng) -> GRSchnorrPrivkey {
         GRSchnorrPrivkey(F::rand(&mut rng))
     }
 
@@ -288,7 +222,7 @@ impl Privkey<Fq> for GRSchnorrPrivkey {
     type Pubkey = GRSchnorrPubkey;
 
     fn gen_ckey(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self::CompressedPrivKey {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn into_key(c: Self::CompressedPrivKey) -> Self {
@@ -296,7 +230,7 @@ impl Privkey<Fq> for GRSchnorrPrivkey {
     }
 
     fn gen_key(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn get_pubkey(&self) -> Self::Pubkey {
@@ -471,7 +405,7 @@ mod test {
         // of times.
         for _ in 0..100 {
             // Make a random privkey and message
-            let privkey = GRSchnorrPrivkey::gen(&mut rng);
+            let privkey = GRSchnorrPrivkey::new(&mut rng);
 
             let pubkey = privkey.get_pubkey();
 
@@ -493,7 +427,7 @@ mod test {
             let cs = ConstraintSystem::<Fq>::new_ref();
 
             // Make a random keypair and message
-            let privkey = GRSchnorrPrivkey::gen(&mut rng);
+            let privkey = GRSchnorrPrivkey::new(&mut rng);
             let pubkey: GRSchnorrPubkey = (&privkey).into();
             let msg = Fq::rand(&mut rng);
             // Sign the message

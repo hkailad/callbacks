@@ -1,11 +1,11 @@
 use ark_ff::{PrimeField, ToConstraintField};
 use ark_r1cs_std::{
+    R1CSVar,
     alloc::{AllocVar, AllocationMode},
     boolean::Boolean,
     convert::ToConstraintFieldGadget,
     fields::fp::FpVar,
     select::CondSelectGadget,
-    R1CSVar,
 };
 use ark_relations::{
     ns,
@@ -45,7 +45,7 @@ pub type IdVar<F> = FpVar<F>;
 
 /// The ZKFields type provides all the necessary types for a user to properly interact with a
 /// server. It is always contained within the `User` type.
-#[derive(Clone, PartialEq, Eq, Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ZKFields<F: PrimeField> {
     /// The nullifier or serial number of the user state.
     pub nul: Nul<F>,
@@ -62,7 +62,7 @@ pub struct ZKFields<F: PrimeField> {
 }
 
 /// The ZKFieldsVar type provides the necessary types to interact with a server in zero knowledge.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ZKFieldsVar<F: PrimeField> {
     /// The nullifier or serial number of the user state.
     pub nul: NulVar<F>,

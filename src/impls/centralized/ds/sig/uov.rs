@@ -13,12 +13,7 @@ use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget, fields::fp::FpVar, prelude::Bo
 use ark_relations::{ns, r1cs::SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use nalgebra::{DMatrix, DVector};
-use rand::{distributions::Standard, prelude::Distribution, Rng};
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-use crate::generic::fold::FoldSer;
+use rand::{Rng, distributions::Standard, prelude::Distribution};
 
 /// A UOV signature.
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq)]
@@ -57,45 +52,6 @@ impl<F: PrimeField, const N: usize, const M: usize> Default for UOVSigVar<F, N, 
             n: PhantomData,
             m: PhantomData,
         }
-    }
-}
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-impl<F: PrimeField, const N: usize, const M: usize> FoldSer<F, UOVSigVar<F, N, M>>
-    for UOVSig<F, N, M>
-{
-    fn repr_len() -> usize {
-        N
-    }
-
-    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<F>> {
-        self.preimage.clone()
-    }
-
-    fn from_fold_repr(ser: &[crate::generic::object::Ser<F>]) -> Self {
-        Self {
-            preimage: ser.to_vec(),
-            n: PhantomData,
-            m: PhantomData,
-        }
-    }
-
-    fn from_fold_repr_zk(
-        var: &[crate::generic::object::SerVar<F>],
-    ) -> Result<UOVSigVar<F, N, M>, SynthesisError> {
-        Ok(UOVSigVar {
-            preimage: var.to_vec(),
-            n: PhantomData,
-            m: PhantomData,
-        })
-    }
-
-    fn to_fold_repr_zk(
-        var: &UOVSigVar<F, N, M>,
-    ) -> Result<Vec<crate::generic::object::SerVar<F>>, SynthesisError> {
-        Ok(var.preimage.clone())
     }
 }
 
@@ -304,7 +260,7 @@ where
     fn gen_ckey(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self::CompressedPrivKey {
         let mut out = vec![];
         for _ in 0..32 {
-            out.push(rng.gen());
+            out.push(rng.r#gen());
         }
         Self::CompressedPrivKey {
             seed: out,
@@ -318,7 +274,7 @@ where
 
         for j in 0..M {
             for i in 0..(N - M) {
-                o[(i, j)] = rng.gen();
+                o[(i, j)] = rng.r#gen();
             }
         }
 
@@ -332,7 +288,7 @@ where
 
             for j in 0..(N - M) {
                 for i in 0..(N - M) {
-                    p1[(i, j)] = rng.gen();
+                    p1[(i, j)] = rng.r#gen();
                 }
             }
             p1s.push(p1.clone());
@@ -341,7 +297,7 @@ where
 
             for j in 0..M {
                 for i in 0..(N - M) {
-                    p2[(i, j)] = rng.gen();
+                    p2[(i, j)] = rng.r#gen();
                 }
             }
             p2s.push(p2.clone());
@@ -480,7 +436,7 @@ where
         let mut v = DVector::from_element(N - M, F::ZERO);
 
         for i in 0..(N - M) {
-            v[i] = rng.gen();
+            v[i] = rng.r#gen();
         }
 
         let mut ml = DMatrix::from_element(M, M, F::ZERO);

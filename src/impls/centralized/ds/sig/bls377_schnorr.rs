@@ -11,12 +11,13 @@ use crate::{
     },
 };
 use ark_bls12_377::{Fr as BlsFr, Fr as F};
-use ark_ec::{twisted_edwards::Affine, AffineRepr, CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup, PrimeGroup, twisted_edwards::Affine};
 use ark_ed_on_bls12_377::{
-    constraints::EdwardsVar as EVar, EdwardsConfig, EdwardsProjective as EProj,
+    EdwardsConfig, EdwardsProjective as EProj, constraints::EdwardsVar as EVar,
 };
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, ToConstraintField, UniformRand};
 use ark_r1cs_std::{
+    R1CSVar,
     alloc::{AllocVar, AllocationMode},
     boolean::Boolean,
     convert::{ToBitsGadget, ToConstraintFieldGadget},
@@ -24,7 +25,6 @@ use ark_r1cs_std::{
     fields::fp::FpVar,
     groups::CurveVar,
     select::CondSelectGadget,
-    R1CSVar,
 };
 use ark_relations::{
     ns,
@@ -183,7 +183,7 @@ impl Pubkey<F> for BLS377SchnorrPubkey {
 }
 
 impl BLS377SchnorrPrivkey {
-    fn gen(mut rng: impl Rng) -> BLS377SchnorrPrivkey {
+    fn new(mut rng: impl Rng) -> BLS377SchnorrPrivkey {
         BLS377SchnorrPrivkey(EProjFr::rand(&mut rng))
     }
 
@@ -237,7 +237,7 @@ impl Privkey<F> for BLS377SchnorrPrivkey {
     type Pubkey = BLS377SchnorrPubkey;
 
     fn gen_ckey(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self::CompressedPrivKey {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn into_key(c: Self::CompressedPrivKey) -> Self {
@@ -245,7 +245,7 @@ impl Privkey<F> for BLS377SchnorrPrivkey {
     }
 
     fn gen_key(rng: &mut (impl rand::CryptoRng + rand::RngCore)) -> Self {
-        Self::gen(rng)
+        Self::new(rng)
     }
 
     fn get_pubkey(&self) -> Self::Pubkey {
@@ -420,7 +420,7 @@ mod test {
         // of times.
         for _ in 0..100 {
             // Make a random privkey and message
-            let privkey = BLS377SchnorrPrivkey::gen(&mut rng);
+            let privkey = BLS377SchnorrPrivkey::new(&mut rng);
             let msg = BlsFr::rand(&mut rng);
 
             // Sign the random message under the random privkey
@@ -437,7 +437,7 @@ mod test {
             let cs = ConstraintSystem::<BlsFr>::new_ref();
 
             // Make a random keypair and message
-            let privkey = BLS377SchnorrPrivkey::gen(&mut rng);
+            let privkey = BLS377SchnorrPrivkey::new(&mut rng);
             let pubkey: BLS377SchnorrPubkey = (&privkey).into();
             let msg = BlsFr::rand(&mut rng);
             // Sign the message

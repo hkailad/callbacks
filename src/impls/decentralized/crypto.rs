@@ -1,17 +1,17 @@
 use ark_crypto_primitives::sponge::{
-    constraints::CryptographicSpongeVar as _,
-    poseidon::{constraints::PoseidonSpongeVar, PoseidonSponge},
     Absorb, CryptographicSponge,
+    constraints::CryptographicSpongeVar as _,
+    poseidon::{PoseidonSponge, constraints::PoseidonSpongeVar},
 };
 use ark_ec::CurveGroup;
 use ark_ff::{Field, PrimeField, ToConstraintField};
 use ark_r1cs_std::{
-    alloc::AllocVar, convert::ToConstraintFieldGadget, fields::fp::FpVar, uint8::UInt8, R1CSVar,
+    R1CSVar, alloc::AllocVar, convert::ToConstraintFieldGadget, fields::fp::FpVar, uint8::UInt8,
 };
 use ark_relations::{ns, r1cs::SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use blake2::{Blake2s256 as Blake, Digest};
-use rand::{distributions::Standard, prelude::Distribution, thread_rng, CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngCore, distributions::Standard, prelude::Distribution, thread_rng};
 use std::marker::PhantomData;
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
         enc::{AECipherSigZK, CPACipher},
         rr::{RRSigner, RRVerifier},
     },
-    util::{gen_poseidon_params, ArrayVar},
+    util::{ArrayVar, gen_poseidon_params},
 };
 
 /// Encryption key (IND-CPA) for a Poseidon-based stream cipher.
@@ -130,14 +130,14 @@ where
 
     fn keygen(rng: &mut (impl CryptoRng + RngCore)) -> Self {
         Self {
-            key: rng.gen(),
+            key: rng.r#gen(),
             phantom_max_size: PhantomData,
         }
     }
 
     fn encrypt(&self, message: Self::M) -> Self::C {
         let mut rng = thread_rng();
-        let nonce: F = rng.gen();
+        let nonce: F = rng.r#gen();
         let mut sponge: PoseidonSponge<F> = PoseidonSponge::new(&gen_poseidon_params(2, false));
         sponge.absorb(&self.to());
         sponge.absorb(&nonce);
@@ -258,7 +258,7 @@ where
     }
 
     fn rerand(&self, rng: &mut (impl CryptoRng + RngCore)) -> (E::ScalarField, Self) {
-        let f = rng.gen();
+        let f = rng.r#gen();
         (
             f,
             Self {
@@ -281,7 +281,7 @@ where
     fn sign_message(&self, message: &Ciphertext<F, N>) -> SchnorrSig<E> {
         let (rand, chall) = loop {
             let mut rng = thread_rng();
-            let randomness = rng.gen();
+            let randomness = rng.r#gen();
             let com = E::generator() * randomness;
             let mut v = vec![];
             com.serialize_compressed(&mut v).unwrap();
@@ -303,8 +303,8 @@ where
         }
     }
 
-    fn gen(rng: &mut (impl CryptoRng + RngCore)) -> Self {
-        Self { sk: rng.gen() }
+    fn new(rng: &mut (impl CryptoRng + RngCore)) -> Self {
+        Self { sk: rng.r#gen() }
     }
 
     fn rerand(&self, randomness: E::ScalarField) -> Self {

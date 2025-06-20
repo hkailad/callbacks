@@ -12,8 +12,8 @@ use crate::{
             crypto::{FakeSigPubkey, FakeSigPubkeyVar, NoEnc, NoSigOTP},
             ds::{
                 sig::{
-                    bls377_schnorr::Bls377Schnorr, gr_schnorr::GrumpkinSchnorr,
-                    jj_schnorr::JubjubSchnorr, uov::BleedingUOV, Signature,
+                    Signature, bls377_schnorr::Bls377Schnorr, gr_schnorr::GrumpkinSchnorr,
+                    jj_schnorr::JubjubSchnorr, uov::BleedingUOV,
                 },
                 sigrange::SigRangeStore,
             },
@@ -32,8 +32,9 @@ use ark_r1cs_std::{
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand::{
+    CryptoRng, Rng, RngCore,
     distributions::{Distribution, Standard},
-    thread_rng, CryptoRng, Rng, RngCore,
+    thread_rng,
 };
 
 /// This is a centralized object storage system, with proofs of membership.
@@ -249,7 +250,7 @@ where
         match out {
             Some(x) => {
                 self.coms.push(object);
-                self.old_nuls.push(rng.gen());
+                self.old_nuls.push(rng.r#gen());
                 self.cb_com_lists.push(vec![]);
                 self.sigs.push(x);
                 Ok(())
@@ -559,7 +560,7 @@ where
         S::verify_zk(
             extra_pub,
             extra_witness,
-            <Poseidon<2>>::hash_in_zk(&[tikvar.0 .0, tikvar.1, tikvar.2])?,
+            <Poseidon<2>>::hash_in_zk(&[tikvar.0.0, tikvar.1, tikvar.2])?,
         )
     }
 
@@ -573,12 +574,12 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        S: Signature<F>,
-        B: NonmembStore<F>,
-        A: Clone + Default + ToConstraintField<F>,
-        AVar: Clone + AllocVar<A, F> + ToConstraintFieldGadget<F>,
-    > PublicCallbackBul<F, A, NoEnc<F, A, AVar>> for CallbackStore<F, S, B, A>
+    F: PrimeField + Absorb,
+    S: Signature<F>,
+    B: NonmembStore<F>,
+    A: Clone + Default + ToConstraintField<F>,
+    AVar: Clone + AllocVar<A, F> + ToConstraintFieldGadget<F>,
+> PublicCallbackBul<F, A, NoEnc<F, A, AVar>> for CallbackStore<F, S, B, A>
 where
     Standard: Distribution<F>,
 {
@@ -637,7 +638,7 @@ where
         extra_witness: Self::MembershipWitnessVar,
         extra_pub: Self::MembershipPubVar,
     ) -> Result<Boolean<F>, SynthesisError> {
-        let mut v = vec![tikvar.0 .0];
+        let mut v = vec![tikvar.0.0];
 
         v.extend_from_slice(&tikvar.1.to_constraint_field()?);
 
@@ -694,12 +695,12 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        S: Signature<F>,
-        B: NonmembStore<F>,
-        A: Clone + Default + ToConstraintField<F>,
-        AVar: Clone + AllocVar<A, F> + ToConstraintFieldGadget<F>,
-    > CallbackBul<F, A, NoEnc<F, A, AVar>> for CallbackStore<F, S, B, A>
+    F: PrimeField + Absorb,
+    S: Signature<F>,
+    B: NonmembStore<F>,
+    A: Clone + Default + ToConstraintField<F>,
+    AVar: Clone + AllocVar<A, F> + ToConstraintFieldGadget<F>,
+> CallbackBul<F, A, NoEnc<F, A, AVar>> for CallbackStore<F, S, B, A>
 where
     Standard: Distribution<F>,
 {
@@ -846,12 +847,12 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        S: Signature<F>,
-        B: NonmembStore<F>,
-        A: Clone + ToConstraintField<F> + Default,
-        AVar: AllocVar<A, F> + Clone,
-    > ServiceProvider<F, A, AVar, NoEnc<F, A, AVar>> for CentralStore<F, S, B, A>
+    F: PrimeField + Absorb,
+    S: Signature<F>,
+    B: NonmembStore<F>,
+    A: Clone + ToConstraintField<F> + Default,
+    AVar: AllocVar<A, F> + Clone,
+> ServiceProvider<F, A, AVar, NoEnc<F, A, AVar>> for CentralStore<F, S, B, A>
 where
     Standard: Distribution<F>,
 {
@@ -893,11 +894,11 @@ where
 }
 
 impl<
-        F: PrimeField + Absorb,
-        S: Signature<F>,
-        B: NonmembStore<F>,
-        A: Clone + ToConstraintField<F> + Default,
-    > CentralStore<F, S, B, A>
+    F: PrimeField + Absorb,
+    S: Signature<F>,
+    B: NonmembStore<F>,
+    A: Clone + ToConstraintField<F> + Default,
+> CentralStore<F, S, B, A>
 where
     Standard: Distribution<F>,
 {
@@ -936,12 +937,8 @@ where
         panic!("No interaction found.");
     }
 }
-impl<
-        F: PrimeField + Absorb,
-        S: Signature<F>,
-        B: NonmembStore<F>,
-        A: Clone + ToConstraintField<F>,
-    > CentralStore<F, S, B, A>
+impl<F: PrimeField + Absorb, S: Signature<F>, B: NonmembStore<F>, A: Clone + ToConstraintField<F>>
+    CentralStore<F, S, B, A>
 where
     Standard: Distribution<F>,
 {

@@ -1,25 +1,25 @@
-use ark_bn254::{constraints::GVar, Bn254 as E, Fr as F, G1Projective as Projective};
+use ark_bn254::{Bn254 as E, Fr as F, G1Projective as Projective};
 use ark_groth16::Groth16;
-use ark_grumpkin::{constraints::GVar as GVar2, Projective as Projective2};
+use ark_grumpkin::Projective as Projective2;
 use ark_r1cs_std::{eq::EqGadget, fields::fp::FpVar, prelude::Boolean};
 use ark_relations::r1cs::Result as ArkResult;
 use folding_schemes::{
+    FoldingScheme,
     commitment::pedersen::Pedersen,
-    folding::nova::{zk::RandomizedIVCProof, Nova, PreprocessorParam},
+    folding::nova::{Nova, PreprocessorParam, zk::RandomizedIVCProof},
     frontend::FCircuit,
     transcript::poseidon::poseidon_canonical_config,
-    FoldingScheme,
 };
-use rand::thread_rng;
+use rand::{Rng, thread_rng};
 use std::time::SystemTime;
 use zk_callbacks::{
     generic::{
         bulletin::{JoinableBulletin, PublicCallbackBul, UserBul},
-        fold::{FoldSer, FoldableUserData, FoldingScan},
+        fold::{FoldInput, FoldingScan},
         interaction::{Callback, Interaction},
         object::{Id, Time},
         scan::{
-            scan_method, scan_predicate, PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar,
+            PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, scan_method, scan_predicate,
         },
         service::ServiceProvider,
         user::{User, UserVar},
@@ -42,41 +42,6 @@ pub struct TestFolding {
     pub token1: F,
     pub token2: F,
 }
-
-impl FoldSer<F, TestFoldingZKVar> for TestFolding {
-    fn repr_len() -> usize {
-        2
-    }
-
-    fn to_fold_repr(&self) -> Vec<zk_callbacks::generic::object::Ser<F>> {
-        vec![self.token1.clone(), self.token2.clone()]
-    }
-
-    fn from_fold_repr(ser: &[zk_callbacks::generic::object::Ser<F>]) -> Self {
-        Self {
-            token1: ser[0].clone(),
-            token2: ser[1].clone(),
-        }
-    }
-
-    fn from_fold_repr_zk(
-        var: &[zk_callbacks::generic::object::SerVar<F>],
-    ) -> Result<TestFoldingZKVar, ark_relations::r1cs::SynthesisError> {
-        Ok(TestFoldingZKVar {
-            token1: var[0].clone(),
-            token2: var[1].clone(),
-        })
-    }
-
-    fn to_fold_repr_zk(
-        var: &TestFoldingZKVar,
-    ) -> Result<Vec<zk_callbacks::generic::object::SerVar<F>>, ark_relations::r1cs::SynthesisError>
-    {
-        Ok(vec![var.token1.clone(), var.token2.clone()])
-    }
-}
-
-impl FoldableUserData<F> for TestFolding {}
 
 const NUMSCANS: usize = 1;
 type CBArg = F;
@@ -296,9 +261,7 @@ fn main() {
 
     type NF = Nova<
         Projective,
-        GVar,
         Projective2,
-        GVar2,
         FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 2>,
         Pedersen<Projective, true>,
         Pedersen<Projective2, true>,
@@ -325,6 +288,7 @@ fn main() {
     let nova_params = NF::preprocess(&mut rng, &nova_preprocess_params).unwrap();
 
     let init_state = vec![u.commit::<Poseidon<2>>()];
+    println!("init: {:?}", init_state[0]);
 
     let cb = u.get_cb(0);
     let tik: FakeSigPubkey<F> = cb.get_ticket();
@@ -394,12 +358,14 @@ fn main() {
 
     let start = SystemTime::now();
 
+    let fold_input = FoldInput {
+        user: u.clone(),
+        scan_args: prs1,
+        nul: rng.r#gen(),
+    };
+
     folding_scheme
-        .prove_step(
-            &mut rng,
-            [u.to_fold_repr(), prs1.to_fold_repr()].concat(),
-            None,
-        )
+        .prove_step(&mut rng, fold_input, None)
         .unwrap();
 
     println!("Fold step time: {:?}", start.elapsed().unwrap());
@@ -430,22 +396,28 @@ fn main() {
         proof.cf_W_i.W.len()
     );
 
-    let verify = RandomizedIVCProof::verify::<
-        Pedersen<Projective, true>,
-        GVar2,
-        Pedersen<Projective2, true>,
-    >(
-        &folding_scheme.r1cs,
-        &folding_scheme.cf_r1cs,
-        folding_scheme.pp_hash,
-        &folding_scheme.poseidon_config,
-        folding_scheme.i,
-        folding_scheme.z_0,
-        folding_scheme.z_i,
-        &proof,
+    let verify =
+        RandomizedIVCProof::verify::<Pedersen<Projective, true>, Pedersen<Projective2, true>>(
+            &folding_scheme.r1cs,
+            &folding_scheme.cf_r1cs,
+            folding_scheme.pp_hash,
+            &folding_scheme.poseidon_config,
+            folding_scheme.i.clone(),
+            folding_scheme.z_0.clone(),
+            folding_scheme.z_i.clone(),
+            &proof,
+        );
+
+    println!(
+        "{:?} {:?} {:?}",
+        folding_scheme.z_0, folding_scheme.z_i, folding_scheme.i
     );
 
     println!("{:?}", verify);
 
     println!("User at the end : {:?}", u);
+    println!(
+        "Committed user at the end : {:?}",
+        u.commit::<Poseidon<2>>()
+    );
 }

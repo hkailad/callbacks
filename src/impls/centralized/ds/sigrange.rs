@@ -1,10 +1,5 @@
 use std::cmp::Ordering;
 
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-use crate::generic::fold::FoldSer;
-
 use crate::{
     crypto::hash::HasherZK,
     impls::{
@@ -75,64 +70,6 @@ impl<F: PrimeField, S: Signature<F>> AllocVar<SignedRange<F, S>, F> for SignedRa
                 sig,
             })
         })
-    }
-}
-
-#[cfg(feature = "folding")]
-#[cfg(any(feature = "folding", doc))]
-#[doc(cfg(feature = "folding"))]
-impl<F: PrimeField, S: Signature<F>> FoldSer<F, SignedRangeVar<F, S>> for SignedRange<F, S>
-where
-    S::Sig: FoldSer<F, S::SigVar>,
-{
-    fn repr_len() -> usize {
-        3 + S::Sig::repr_len()
-    }
-
-    fn to_fold_repr(&self) -> Vec<crate::generic::object::Ser<F>> {
-        let mut v = vec![];
-        v.push(self.range.0);
-        v.push(self.range.1);
-        v.push(self.epoch);
-        v.extend(self.sig.to_fold_repr());
-        v
-    }
-
-    fn from_fold_repr(ser: &[crate::generic::object::Ser<F>]) -> Self {
-        let r0 = ser[0];
-        let r1 = ser[1];
-        let r2 = ser[2];
-        let sig = S::Sig::from_fold_repr(&ser[3..]);
-        Self {
-            range: (r0, r1),
-            epoch: r2,
-            sig,
-        }
-    }
-
-    fn from_fold_repr_zk(
-        var: &[crate::generic::object::SerVar<F>],
-    ) -> Result<SignedRangeVar<F, S>, SynthesisError> {
-        let r0 = var[0].clone();
-        let r1 = var[1].clone();
-        let r2 = var[2].clone();
-        let sig = S::Sig::from_fold_repr_zk(&var[3..])?;
-        Ok(SignedRangeVar {
-            range: (r0, r1),
-            epoch: r2,
-            sig,
-        })
-    }
-
-    fn to_fold_repr_zk(
-        var: &SignedRangeVar<F, S>,
-    ) -> Result<Vec<crate::generic::object::SerVar<F>>, SynthesisError> {
-        let mut v = vec![];
-        v.push(var.range.0.clone());
-        v.push(var.range.1.clone());
-        v.push(var.epoch.clone());
-        v.extend(S::Sig::to_fold_repr_zk(&var.sig)?);
-        Ok(v)
     }
 }
 
