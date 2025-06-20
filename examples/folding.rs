@@ -10,17 +10,16 @@ use folding_schemes::{
     frontend::FCircuit,
     transcript::poseidon::poseidon_canonical_config,
 };
-use rand::{Rng, thread_rng};
+use rand::thread_rng;
 use std::time::SystemTime;
 use zk_callbacks::{
+    crypto::hash::HasherZK,
     generic::{
-        bulletin::{JoinableBulletin, PublicCallbackBul, UserBul},
-        fold::{FoldInput, FoldingScan},
+        bulletin::{JoinableBulletin, PublicUserBul, UserBul},
+        fold::FoldingScan,
         interaction::{Callback, Interaction},
         object::{Id, Time},
-        scan::{
-            PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, scan_method, scan_predicate,
-        },
+        scan::PubScanArgs,
         service::ServiceProvider,
         user::{User, UserVar},
     },
@@ -52,15 +51,6 @@ type CB = Callback<F, TestFolding, CBArg, CBArgVar>;
 type Int1 = Interaction<F, TestFolding, (), (), (), (), CBArg, CBArgVar, 1>;
 type PubScan =
     PubScanArgs<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
-type PubScanVar =
-    PubScanArgsVar<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
-
-type PrivScan = PrivScanArgs<F, F, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
-type PrivScanVar = PrivScanArgsVar<F, F, NoSigOTP<F>, GRSchnorrCallbackStore<F>, NUMSCANS>;
-
-type IntScan =
-    Interaction<F, TestFolding, PubScan, PubScanVar, PrivScan, PrivScanVar, CBArg, CBArgVar, 0>;
-
 type OSt = GRSchnorrObjStore;
 type CSt = GRSchnorrCallbackStore<F>;
 type St = GRSchnorrStore<F>;
@@ -128,24 +118,6 @@ fn main() {
         callbacks: [cb.clone()],
     };
 
-    let cb_interaction: IntScan = Interaction {
-        meth: (
-            scan_method::<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, CSt, Poseidon<2>, NUMSCANS>,
-            scan_predicate::<F, TestFolding, F, FpVar<F>, NoSigOTP<F>, CSt, Poseidon<2>, NUMSCANS>,
-        ),
-        callbacks: [],
-    };
-
-    let ex = PubScanArgs {
-        memb_pub: [store.callback_bul.get_pubkey(); NUMSCANS],
-        is_memb_data_const: true,
-        nmemb_pub: [store.callback_bul.nmemb_bul.get_pubkey(); NUMSCANS],
-        is_nmemb_data_const: true,
-        cur_time: F::from(0),
-        bulletin: store.callback_bul.clone(),
-        cb_methods: cb_methods.clone(),
-    };
-
     // generate keys for the method described initially
     let (pk, vk) = interaction // see interaction
         .generate_keys::<Poseidon<2>, Groth16<E>, NoSigOTP<F>, OSt>(
@@ -155,14 +127,58 @@ fn main() {
             false,
         );
 
-    // generate keys for the callback scan
-    let (_pks, _vks) = cb_interaction // see cb_interaction
-        .generate_keys::<Poseidon<2>, Groth16<E>, NoSigOTP<F>, OSt>(
-            &mut rng,
-            Some(store.obj_bul.get_pubkey()),
-            ex,
-            true,
-        );
+    // generate keys for folding
+
+    // SERVER SIDE
+
+    type NF = Nova<
+        Projective,
+        Projective2,
+        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, OSt, CSt, Poseidon<2>, 1>,
+        Pedersen<Projective, true>,
+        Pedersen<Projective2, true>,
+        true,
+    >;
+
+    let ps: PubScan = PubScanArgs {
+        memb_pub: [store.callback_bul.get_pubkey(); NUMSCANS],
+        is_memb_data_const: true,
+        nmemb_pub: [store.callback_bul.nmemb_bul.get_pubkey(); NUMSCANS],
+        is_nmemb_data_const: true,
+        cur_time: store.callback_bul.get_epoch(),
+        bulletin: store.callback_bul.clone(),
+        cb_methods: cb_methods.clone(),
+    };
+
+    let dummy_params = (ps, store.obj_bul.get_pubkey());
+
+    let f_circ: FoldingScan<
+        F,
+        TestFolding,
+        CBArg,
+        CBArgVar,
+        NoSigOTP<F>,
+        OSt,
+        CSt,
+        Poseidon<2>,
+        1,
+    > = FoldingScan::new(dummy_params).unwrap();
+
+    let poseidon_config = poseidon_canonical_config::<F>();
+    let nova_preprocess_params = PreprocessorParam::new(poseidon_config.clone(), f_circ.clone());
+    let nova_params = NF::preprocess(&mut rng, &nova_preprocess_params).unwrap();
+
+    let dummy_folding_scheme: NF =
+        NF::init(&nova_params, f_circ, [F::from(0); 3].to_vec()).unwrap();
+
+    let server_params = (
+        dummy_folding_scheme.r1cs,
+        dummy_folding_scheme.cf_r1cs,
+        dummy_folding_scheme.pp_hash,
+        poseidon_config,
+        nova_params,
+    );
+    // User
 
     let mut u = User::create(
         TestFolding {
@@ -259,113 +275,50 @@ fn main() {
             389,
         );
 
-    type NF = Nova<
-        Projective,
-        Projective2,
-        FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 2>,
-        Pedersen<Projective, true>,
-        Pedersen<Projective2, true>,
-        true,
-    >;
+    // user produces a folding proof
 
-    // Setup a scan for a single callback (the first one in the list)
-    let ps = PubScanArgs {
-        // Create the public scanning arguments
-        memb_pub: [store.callback_bul.get_pubkey(); 2], // Public membership data (pubkey)
-        is_memb_data_const: true,                       // it is constant
-        nmemb_pub: [store.callback_bul.nmemb_bul.get_pubkey(); 2], // Public nonmemb data (pubkey for range sigs)
-        is_nmemb_data_const: true,
-        cur_time: store.callback_bul.nmemb_bul.get_epoch(), // *current* time as of this proof generation
-        bulletin: store.callback_bul.clone(),               // bulletin handle
-        cb_methods: cb_methods.clone(), // Vec of callbacks (used to check which method to call)
-    };
+    let (params, init, v, last_nonce) = u
+        .scan_and_create_fold_proof_inputs::<_, _, _, _, _, Poseidon<2>, 1>(
+            &mut rng,
+            <OSt as PublicUserBul<F, TestFolding>>::get_membership_data(
+                &store.obj_bul,
+                u.commit::<Poseidon<2>>(),
+            )
+            .unwrap(),
+            &store.callback_bul,
+            true,
+            (true, true),
+            store.callback_bul.nmemb_bul.get_epoch(),
+            cb_methods.clone(),
+            2,
+        );
 
-    let f_circ: FoldingScan<F, TestFolding, CBArg, CBArgVar, NoSigOTP<F>, CSt, Poseidon<2>, 2> =
-        FoldingScan::new(ps.clone()).unwrap();
+    let f_circ: FoldingScan<
+        F,
+        TestFolding,
+        CBArg,
+        CBArgVar,
+        NoSigOTP<F>,
+        OSt,
+        CSt,
+        Poseidon<2>,
+        1,
+    > = FoldingScan::new(params).unwrap();
 
-    let poseidon_config = poseidon_canonical_config::<F>();
-    let nova_preprocess_params = PreprocessorParam::new(poseidon_config, f_circ.clone());
-    let nova_params = NF::preprocess(&mut rng, &nova_preprocess_params).unwrap();
-
-    let init_state = vec![u.commit::<Poseidon<2>>()];
-    println!("init: {:?}", init_state[0]);
-
-    let cb = u.get_cb(0);
-    let tik: FakeSigPubkey<F> = cb.get_ticket();
-
-    let cb2 = u.get_cb(1);
-    let tik2: FakeSigPubkey<F> = cb.get_ticket();
-
-    let x =
-        <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
-
-    let x2 =
-        <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
-
-    let prs1: PrivScanArgs<F, CBArg, NoSigOTP<F>, CSt, 2> = PrivScanArgs {
-        priv_n_tickets: [cb, cb2],
-        post_times: [
-            x.map_or(F::from(0), |(_, p2)| p2),
-            x2.map_or(F::from(0), |(_, p2)| p2),
-        ],
-        enc_args: [
-            x.map_or(F::from(0), |(p1, _)| p1),
-            x2.map_or(F::from(0), |(p1, _)| p1),
-        ],
-        memb_priv: [
-            store
-                .callback_bul
-                .get_memb_witness(&tik)
-                .unwrap_or_default(),
-            store
-                .callback_bul
-                .get_memb_witness(&tik2)
-                .unwrap_or_default(),
-        ],
-        nmemb_priv: [
-            store
-                .callback_bul
-                .get_nmemb_witness(&tik)
-                .unwrap_or_default(),
-            store
-                .callback_bul
-                .get_nmemb_witness(&tik2)
-                .unwrap_or_default(),
-        ],
-    };
-
-    let cb = u.get_cb(1);
-    let tik: FakeSigPubkey<F> = cb.get_ticket();
-
-    let x =
-        <CSt as PublicCallbackBul<F, F, NoSigOTP<F>>>::verify_in(&store.callback_bul, tik.clone());
-
-    let prs2: PrivScanArgs<F, CBArg, NoSigOTP<F>, CSt, 1> = PrivScanArgs {
-        priv_n_tickets: [cb],
-        post_times: [x.map_or(F::from(0), |(_, p2)| p2)],
-        enc_args: [x.map_or(F::from(0), |(p1, _)| p1)],
-        memb_priv: [store
-            .callback_bul
-            .get_memb_witness(&tik)
-            .unwrap_or_default()],
-        nmemb_priv: [store
-            .callback_bul
-            .get_nmemb_witness(&tik)
-            .unwrap_or_default()],
-    };
-
-    let mut folding_scheme: NF = NF::init(&nova_params, f_circ, init_state.clone()).unwrap();
+    let mut folding_scheme: NF = NF::init(&server_params.4, f_circ, init.clone()).unwrap();
 
     let start = SystemTime::now();
 
-    let fold_input = FoldInput {
-        user: u.clone(),
-        scan_args: prs1,
-        nul: rng.r#gen(),
-    };
+    folding_scheme
+        .prove_step(&mut rng, v[0].clone(), None)
+        .unwrap();
+
+    println!("Fold step time: {:?}", start.elapsed().unwrap());
+
+    let start = SystemTime::now();
 
     folding_scheme
-        .prove_step(&mut rng, fold_input, None)
+        .prove_step(&mut rng, v[1].clone(), None)
         .unwrap();
 
     println!("Fold step time: {:?}", start.elapsed().unwrap());
@@ -386,34 +339,40 @@ fn main() {
 
     let proof = RandomizedIVCProof::new(&folding_scheme, &mut rng).unwrap();
 
-    println!("Finalizing proof time: {:?}", start.elapsed().unwrap());
-
-    println!(
-        "Proof sizes: {:?} {:?} {:?} {:?}",
-        proof.W_i_prime.E.len(),
-        proof.W_i_prime.W.len(),
-        proof.cf_W_i.E.len(),
-        proof.cf_W_i.W.len()
+    let client_proof_data = (
+        folding_scheme.i.clone(),
+        folding_scheme.z_0.clone(),
+        folding_scheme.z_i.clone(),
+        proof,
+        u.commit::<Poseidon<2>>(),
+        last_nonce,
     );
+
+    println!("Blinding step time: {:?}", start.elapsed().unwrap());
+
+    // Server now verifies folding proof.
 
     let verify =
         RandomizedIVCProof::verify::<Pedersen<Projective, true>, Pedersen<Projective2, true>>(
-            &folding_scheme.r1cs,
-            &folding_scheme.cf_r1cs,
-            folding_scheme.pp_hash,
-            &folding_scheme.poseidon_config,
-            folding_scheme.i.clone(),
-            folding_scheme.z_0.clone(),
-            folding_scheme.z_i.clone(),
-            &proof,
+            &server_params.0,
+            &server_params.1,
+            server_params.2.clone(),
+            &server_params.3,
+            client_proof_data.0.clone(),
+            client_proof_data.1.clone(),
+            client_proof_data.2.clone(),
+            &client_proof_data.3,
         );
 
-    println!(
-        "{:?} {:?} {:?}",
-        folding_scheme.z_0, folding_scheme.z_i, folding_scheme.i
-    );
+    let verif2 = client_proof_data.1[0] == client_proof_data.1[1]
+        && client_proof_data.1[2] == store.callback_bul.get_epoch();
+
+    let verif3 =
+        <Poseidon<2>>::hash(&[client_proof_data.4, client_proof_data.5]) == client_proof_data.2[0];
 
     println!("{:?}", verify);
+    println!("{:?}", verif2);
+    println!("{:?}", verif3);
 
     println!("User at the end : {:?}", u);
     println!(

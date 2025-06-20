@@ -8,9 +8,9 @@ use std::time::SystemTime;
 use zk_callbacks::{
     generic::{
         bulletin::{CallbackBul, JoinableBulletin, UserBul},
-        interaction::{generate_keys_for_statement_in, Callback, Interaction},
+        interaction::{Callback, Interaction, generate_keys_for_statement_in},
         object::{Id, Time},
-        scan::{get_scan_interaction, PubScanArgs},
+        scan::{PubScanArgs, get_scan_interaction},
         service::ServiceProvider,
         user::{User, UserVar},
     },
@@ -284,9 +284,9 @@ fn main() {
 
     let mut pub_inputs = vec![];
     pub_inputs.extend::<Vec<F>>(().to_field_elements().unwrap()); // pub args
-                                                                  // pub_inputs.extend::<Vec<F>>(store.obj_bul.get_pubkey().to_field_elements().unwrap()); // pub membership data (if not constant)
-                                                                  // The public membership data in this case is constant, so we don't need to pass it in as an
-                                                                  // argument
+    // pub_inputs.extend::<Vec<F>>(store.obj_bul.get_pubkey().to_field_elements().unwrap()); // pub membership data (if not constant)
+    // The public membership data in this case is constant, so we don't need to pass it in as an
+    // argument
     let out = Groth16::<E>::verify(&vki, &pub_inputs, &proof);
 
     println!("\t (time) Verified proof: {:?}", start.elapsed().unwrap());
