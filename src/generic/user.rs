@@ -2543,7 +2543,7 @@ where
         let mut nonces = vec![rng.r#gen()];
 
         for _ in 0..num_folds {
-            let (ps, prs) = self.get_scan_arguments::<CBArgs, CBArgsVar, Crypto, CBul, NUMSCANS>(
+            let (ps, prs) = u.get_scan_arguments::<CBArgs, CBArgsVar, Crypto, CBul, NUMSCANS>(
                 cbul,
                 is_memb_nmemb_const,
                 cur_time,
