@@ -518,10 +518,10 @@ where
 
     type NonMembershipPubVar = B::NonMembershipPubVar;
 
-    fn verify_in(&self, tik: FakeSigPubkey<F>) -> Option<(F, Time<F>)> {
+    fn verify_in(&self, tik: FakeSigPubkey<F>) -> Option<(F, (), Time<F>)> {
         for (t, arg, time) in &self.memb_called_cbs {
             if t == &tik {
-                return Some((*arg, *time));
+                return Some((*arg, (), *time));
             }
         }
         None
@@ -599,10 +599,10 @@ where
 
     type NonMembershipPubVar = B::NonMembershipPubVar;
 
-    fn verify_in(&self, tik: FakeSigPubkey<F>) -> Option<(A, Time<F>)> {
+    fn verify_in(&self, tik: FakeSigPubkey<F>) -> Option<(A, (), Time<F>)> {
         for (t, arg, time) in &self.memb_called_cbs {
             if t == &tik {
-                return Some((arg.clone(), *time));
+                return Some((arg.clone(), (), *time));
             }
         }
         None

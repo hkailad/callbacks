@@ -1,4 +1,4 @@
-use crate::crypto::enc::CPACipher;
+use crate::crypto::{enc::CPACipher, rr::RRVerifier};
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::{PrimeField, ToConstraintField};
 use ark_r1cs_std::{
@@ -645,7 +645,14 @@ pub fn scan_method<
         );
 
         match pub_args.bulletin.verify_in(i.cb_entry.tik.clone()) {
-            Some((ct, time)) => {
+            Some((ct, sig, time)) => {
+                assert!(
+                    <Crypto as AECipherSigZK<F, CBArgs>>::SigPK::verify(
+                        &i.cb_entry.tik,
+                        ct.clone(),
+                        sig
+                    ) == true
+                );
                 if i.cb_entry.expirable && time > i.cb_entry.expiration {
                 } else {
                     for x in &pub_args.cb_methods {

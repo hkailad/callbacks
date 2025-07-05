@@ -102,7 +102,11 @@ impl<F: PrimeField + Absorb, Args: Clone, Crypto: AECipherSigZK<F, Args>>
     fn verify_in(
         &self,
         _tik: <Crypto as AECipherSigZK<F, Args>>::SigPK,
-    ) -> Option<(<Crypto as AECipherSigZK<F, Args>>::Ct, Time<F>)> {
+    ) -> Option<(
+        <Crypto as AECipherSigZK<F, Args>>::Ct,
+        <Crypto as AECipherSigZK<F, Args>>::Sig,
+        Time<F>,
+    )> {
         None
     }
 
@@ -159,11 +163,11 @@ impl<F: PrimeField + Absorb, Args: Clone, Crypto: AECipherSigZK<F, Args>>
 }
 
 impl<
-        F: PrimeField + Absorb,
-        Args: Clone,
-        ArgsVar: AllocVar<Args, F>,
-        Crypto: AECipherSigZK<F, Args>,
-    > ServiceProvider<F, Args, ArgsVar, Crypto> for DummyStore
+    F: PrimeField + Absorb,
+    Args: Clone,
+    ArgsVar: AllocVar<Args, F>,
+    Crypto: AECipherSigZK<F, Args>,
+> ServiceProvider<F, Args, ArgsVar, Crypto> for DummyStore
 {
     type Error = ();
     type InteractionData = ();

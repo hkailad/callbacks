@@ -2,7 +2,7 @@
 #[cfg(feature = "folding")]
 use crate::generic::fold::FoldInput;
 use crate::{
-    crypto::{enc::AECipherSigZK, hash::FieldHash},
+    crypto::{enc::AECipherSigZK, hash::FieldHash, rr::RRVerifier},
     generic::{
         bulletin::PublicUserBul,
         callbacks::{CallbackCom, add_ticket_to_hc, create_cbs_from_interaction},
@@ -725,10 +725,23 @@ where
             let cb: CallbackCom<F, CBArgs, Crypto> = self.get_cb::<CBArgs, Crypto>(start_ind + i);
             let data = cbul.get_membership_data(cb.get_ticket());
             let if_in = cbul.verify_in(cb.get_ticket());
-            let (enc, time) = match if_in {
-                Some((e, t)) => (e, t),
-                None => (Crypto::Ct::default(), Time::default()),
+            let (enc, sig, time) = match if_in {
+                Some((e, s, t)) => (e, s, t),
+                None => (
+                    Crypto::Ct::default(),
+                    Crypto::Sig::default(),
+                    Time::default(),
+                ),
             };
+
+            assert!(
+                <Crypto as AECipherSigZK<F, CBArgs>>::SigPK::verify(
+                    &cb.get_ticket(),
+                    enc.clone(),
+                    sig
+                ) == true
+            );
+
             vec_enc.push(enc);
             vec_times.push(time);
             vec_cbs.push(cb);
@@ -1822,10 +1835,23 @@ where
             let cb: CallbackCom<F, CBArgs, Crypto> = self.get_cb::<CBArgs, Crypto>(start_ind + i);
             let data = cbul.get_membership_data(cb.get_ticket());
             let if_in = cbul.verify_in(cb.get_ticket());
-            let (enc, time) = match if_in {
-                Some((e, t)) => (e, t),
-                None => (Crypto::Ct::default(), Time::default()),
+            let (enc, sig, time) = match if_in {
+                Some((e, s, t)) => (e, s, t),
+                None => (
+                    Crypto::Ct::default(),
+                    Crypto::Sig::default(),
+                    Time::default(),
+                ),
             };
+
+            assert!(
+                <Crypto as AECipherSigZK<F, CBArgs>>::SigPK::verify(
+                    &cb.get_ticket(),
+                    enc.clone(),
+                    sig
+                ) == true
+            );
+
             vec_enc.push(enc);
             vec_times.push(time);
             vec_cbs.push(cb);
@@ -1938,10 +1964,23 @@ where
             let cb: CallbackCom<F, CBArgs, Crypto> = self.get_cb::<CBArgs, Crypto>(start_ind + i);
             let data = cbul.get_membership_data(cb.get_ticket());
             let if_in = cbul.verify_in(cb.get_ticket());
-            let (enc, time) = match if_in {
-                Some((e, t)) => (e, t),
-                None => (Crypto::Ct::default(), Time::default()),
+            let (enc, sig, time) = match if_in {
+                Some((e, s, t)) => (e, s, t),
+                None => (
+                    Crypto::Ct::default(),
+                    Crypto::Sig::default(),
+                    Time::default(),
+                ),
             };
+
+            assert!(
+                <Crypto as AECipherSigZK<F, CBArgs>>::SigPK::verify(
+                    &cb.get_ticket(),
+                    enc.clone(),
+                    sig
+                ) == true
+            );
+
             vec_enc.push(enc);
             vec_times.push(time);
             vec_cbs.push(cb);
@@ -2062,10 +2101,23 @@ where
             let cb: CallbackCom<F, CBArgs, Crypto> = self.get_cb::<CBArgs, Crypto>(start_ind + i);
             let data = cbul.get_membership_data(cb.get_ticket());
             let if_in = cbul.verify_in(cb.get_ticket());
-            let (enc, time) = match if_in {
-                Some((e, t)) => (e, t),
-                None => (Crypto::Ct::default(), Time::default()),
+            let (enc, sig, time) = match if_in {
+                Some((e, s, t)) => (e, s, t),
+                None => (
+                    Crypto::Ct::default(),
+                    Crypto::Sig::default(),
+                    Time::default(),
+                ),
             };
+
+            assert!(
+                <Crypto as AECipherSigZK<F, CBArgs>>::SigPK::verify(
+                    &cb.get_ticket(),
+                    enc.clone(),
+                    sig
+                ) == true
+            );
+
             vec_enc.push(enc);
             vec_times.push(time);
             vec_cbs.push(cb);

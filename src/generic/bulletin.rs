@@ -980,7 +980,7 @@ pub trait PublicCallbackBul<F: PrimeField, CBArgs: Clone, Crypto: AECipherSigZK<
     /// ciphertext and time when the ticket was posted (or the callback was called).
     ///
     /// This function returns None if the callback ticket is not in the bulletin.
-    fn verify_in(&self, tik: Crypto::SigPK) -> Option<(Crypto::Ct, Time<F>)>;
+    fn verify_in(&self, tik: Crypto::SigPK) -> Option<(Crypto::Ct, Crypto::Sig, Time<F>)>;
 
     /// Checks whether a ticket is not contained in the bulletin (has not been called).
     fn verify_not_in(&self, tik: Crypto::SigPK) -> bool;

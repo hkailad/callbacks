@@ -155,7 +155,7 @@ pub trait AECipherSigZK<F: PrimeField, Args: Clone>: Clone + std::fmt::Debug {
     type EncKeyVar: AllocVar<Self::EncKey, F> + ToConstraintFieldGadget<F> + Clone;
 
     /// The signature on `Ct`.
-    type Sig: Clone;
+    type Sig: Clone + Default;
 
     /// The randomness used for rerandomizing the signature public keys.
     type Rand: std::fmt::Debug + Clone + CanonicalSerialize + CanonicalDeserialize;
