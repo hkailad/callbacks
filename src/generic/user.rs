@@ -1,6 +1,9 @@
 #[cfg(any(feature = "folding", doc))]
 #[cfg(feature = "folding")]
-use crate::generic::fold::FoldInput;
+use crate::generic::fold::{Rerand, RerandVar, FoldInput};
+#[cfg(any(feature = "folding", doc))]
+#[cfg(feature = "folding")]
+use crate::generic::object::{ComRandVar, ComRand};
 use crate::{
     crypto::{enc::AECipherSigZK, hash::FieldHash, rr::RRVerifier},
     generic::{
@@ -35,7 +38,6 @@ use std::{
     borrow::Borrow,
     io::{Read, Write},
 };
-
 use crate::generic::{
     bulletin::PublicCallbackBul,
     scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, get_scan_interaction},
@@ -2543,6 +2545,7 @@ where
         Bul: PublicUserBul<F, U>,
         CBul: PublicCallbackBul<F, CBArgs, Crypto> + Clone,
         H: FieldHash<F>,
+        Snark: SNARK<F, Error = SynthesisError>,
         const NUMSCANS: usize,
     >(
         &mut self,
@@ -2554,6 +2557,7 @@ where
         is_memb_nmemb_const: (bool, bool),
         cur_time: Time<F>,
         cb_methods: Vec<Callback<F, U, CBArgs, CBArgsVar>>,
+        pk: &Snark::ProvingKey,
         num_folds: usize,
     ) -> (
         (
@@ -2562,7 +2566,7 @@ where
         ),
         Vec<F>,
         Vec<FoldInput<F, U, CBArgs, CBArgsVar, Crypto, Bul, CBul, NUMSCANS>>,
-        F,
+        (Com<F>, Nul<F>, Snark::Proof),
     )
     where
         U: Default,
@@ -2574,13 +2578,19 @@ where
         assert!(is_bul_data_const == true);
         assert!(is_memb_nmemb_const == (true, true));
         assert!(num_folds > 0);
-        use crate::generic::scan::scan_method;
+        use crate::generic::{fold::rerandomize_predicate, scan::scan_method};
 
         let mut v: Vec<FoldInput<F, U, CBArgs, CBArgsVar, Crypto, Bul, CBul, NUMSCANS>> = vec![];
 
         let mut u: User<F, U> = self.clone();
 
-        let orig = self.clone().commit::<H>();
+        u.zk_fields.com_rand = rng.r#gen();
+
+        let commit = u.commit::<H>();
+
+        let old_nul = u.zk_fields.nul.clone();
+
+        let proof = self.prove_statement_and_in::<H, Rerand<F>, RerandVar<F>, ComRand<F>, ComRandVar<F>, Snark, Bul>(rng, rerandomize_predicate::<H, F, U>, pk, (bul_data.1.clone(), bul_data.0.clone()), is_bul_data_const, Rerand { com: commit, nul: u.zk_fields.nul.clone() } , u.zk_fields.com_rand).unwrap();
 
         let mut ps_ret = PubScanArgs {
             memb_pub: core::array::from_fn(|_| CBul::MembershipPub::default()),
@@ -2591,8 +2601,6 @@ where
             bulletin: cbul.clone(),
             cb_methods: cb_methods.clone(),
         };
-
-        let mut nonces = vec![rng.r#gen()];
 
         for _ in 0..num_folds {
             let (ps, prs) = u.get_scan_arguments::<CBArgs, CBArgsVar, Crypto, CBul, NUMSCANS>(
@@ -2613,20 +2621,13 @@ where
             new_u.zk_fields.nul = rng.r#gen();
             new_u.zk_fields.com_rand = rng.r#gen();
 
-            let post_nonce = rng.r#gen();
-
             v.push(FoldInput {
                 user: u.clone(),
                 scan_args: prs,
                 nul: new_u.zk_fields.nul,
                 com_rand: new_u.zk_fields.com_rand,
-                nonce: nonces[nonces.len() - 1],
-                post_nonce,
-                hid_old_com: orig,
                 memb_witness: bul_data.1.clone(),
             });
-
-            nonces.push(post_nonce);
 
             u = new_u.clone();
         }
@@ -2636,13 +2637,12 @@ where
         (
             (ps_ret, bul_data.0),
             [
-                H::hash(&[orig, nonces[0]]),
-                H::hash(&[orig, nonces[0]]),
+                commit,
                 cur_time,
             ]
             .to_vec(),
             v,
-            nonces[nonces.len() - 1],
+            (commit, old_nul, proof),
         )
     }
 }

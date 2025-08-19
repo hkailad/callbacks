@@ -1,24 +1,81 @@
-use ark_r1cs_std::{fields::fp::FpVar, prelude::Boolean};
 use ark_relations::ns;
 use std::{borrow::Borrow, marker::PhantomData};
-
-use ark_r1cs_std::{alloc::AllocationMode, select::CondSelectGadget};
-
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
+use ark_r1cs_std::{alloc::AllocationMode, prelude::Boolean, select::CondSelectGadget};
+use rand::{CryptoRng, RngCore};
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use ark_r1cs_std::{alloc::AllocVar, eq::EqGadget};
 use ark_relations::r1cs::{Namespace, SynthesisError};
 use folding_schemes::frontend::FCircuit;
-
+use ark_relations::r1cs::{Result as ArkResult};
+use ark_snark::SNARK;
 use crate::{
     crypto::{enc::AECipherSigZK, hash::FieldHash},
     generic::{
         bulletin::{PublicCallbackBul, PublicUserBul},
-        object::{Com, ComRand, ComRandVar, ComVar, Nul, NulVar},
-        scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, scan_apply_method_zk},
-        user::{User, UserData, UserVar},
+ interaction::generate_keys_for_statement_in, object::{Com, ComRand, ComRandVar, ComVar, Nul, NulVar},
+ scan::{scan_apply_method_zk, PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar},
+ user::{User, UserData, UserVar}
     },
 };
+
+
+// TODO: add a verify for folding? that uses this rerand struct internally
+#[derive(Default, Clone)]
+pub(crate) struct Rerand<F> {
+    pub(crate) com: Com<F>,
+    pub(crate) nul: Nul<F>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RerandVar<F: PrimeField> {
+    com: ComVar<F>,
+    nul: NulVar<F>,
+}
+
+impl<F: PrimeField + Absorb> AllocVar<Rerand<F>, F> for RerandVar<F> {
+    fn new_variable<T: Borrow<Rerand<F>>>(
+        cs: impl Into<Namespace<F>>,
+        f: impl FnOnce() -> Result<T, SynthesisError>,
+        mode: AllocationMode,
+    ) -> Result<Self, SynthesisError> {
+        let ns = cs.into();
+        let cs = ns.cs();
+        let res = f();
+
+        res.and_then(|rec| {
+            let rec = rec.borrow();
+            let com =
+                <ComVar<F>>::new_variable(ns!(cs, "com"), || Ok(rec.com.clone()), mode)?;
+            let nul = <NulVar<F>>::new_variable(
+                ns!(cs, "nul"),
+                || Ok(rec.nul.clone()),
+                mode,
+            )?;
+            Ok(RerandVar { com , nul })
+        })
+    }
+}
+
+
+pub(crate) fn rerandomize_predicate<'a, 'b, H: FieldHash<F>, F: PrimeField + Absorb, U: UserData<F>>(u: &'a UserVar<F, U>, _com: &'b ComVar<F>, pub_args: RerandVar<F>, priv_args: ComRandVar<F>) -> ArkResult<Boolean<F>> {
+    let b1 = u.zk_fields.nul.is_eq(&pub_args.nul)?;
+    let mut new_u = u.clone();
+    new_u.zk_fields.com_rand = priv_args;
+    let b2 = <User<F, U>>::commit_in_zk::<H>(new_u)?.is_eq(&pub_args.com)?;
+    Ok(b1 & b2)
+}
+
+// TODO: write docs.
+/// TODO.
+pub fn gen_fold_proof_snark_key<F: PrimeField + Absorb, H: FieldHash<F>, U: UserData<F> + Default, Snark: SNARK<F>, Bul: PublicUserBul<F, U>>(
+    rng: &mut (impl CryptoRng + RngCore),
+    memb_data: Option<Bul::MembershipPub>,
+) -> (Snark::ProvingKey, Snark::VerifyingKey) where Standard: Distribution<F> {
+    generate_keys_for_statement_in::<F, H, U, Rerand<F>, RerandVar<F>, ComRand<F>, ComRandVar<F>, Snark, Bul>(rng, rerandomize_predicate::<H, F, U>, memb_data, Rerand { com: F::default(), nul: F::default() })
+}
 
 /// This allows for users to perform a folding scan instead of scanning incremenetally.
 ///
@@ -27,7 +84,6 @@ use crate::{
 ///
 /// The parameters passed in include the public arguments for the scan. The private arguments are
 /// treated as extra witnesses during the folding process.
-///Eligibility: To be considered for a TA position, you must be a current student within the ComRandputer Science Department and meet the following criteria:
 /// At each folding step, [`PrivScanArgs`] are deserialized from the folding representation. This
 /// struct will always have a callback count of `1`, as we only fold the scan one step at a time.
 #[derive(Clone)]
@@ -70,6 +126,7 @@ impl<
     }
 }
 
+// TODO: write docs
 /// An external input to a single folding step. TODO
 #[derive(Clone)]
 pub struct FoldInput<
@@ -93,12 +150,6 @@ pub struct FoldInput<
     pub nul: Nul<F>,
     /// New commitment randomness. TODO
     pub com_rand: ComRand<F>,
-    /// Second commit nonce. TODO
-    pub nonce: F,
-    /// next nonce. TODO
-    pub post_nonce: F,
-    /// hidden commitment to old user. TODO
-    pub hid_old_com: Com<F>,
     /// Bulletin membership witness. TODO
     pub memb_witness: Bul::MembershipWitness,
 }
@@ -124,9 +175,6 @@ where
             scan_args: PrivScanArgs::default(),
             nul: Nul::default(),
             com_rand: ComRand::default(),
-            nonce: F::default(),
-            post_nonce: F::default(),
-            hid_old_com: Com::default(),
             memb_witness: Bul::MembershipWitness::default(),
         }
     }
@@ -151,6 +199,7 @@ where
     }
 }
 
+// TODO: write docs
 /// An external input to a single folding step in-circuit. TODO
 #[derive(Clone)]
 pub struct FoldInputVar<
@@ -171,12 +220,6 @@ pub struct FoldInputVar<
     pub nul: NulVar<F>,
     /// New commitment randomness. TODO
     pub com_rand: ComRandVar<F>,
-    /// Second commit nonce. TODO
-    pub nonce: FpVar<F>,
-    /// next nonce. TODO
-    pub post_nonce: FpVar<F>,
-    /// hidden commitment to old user. TODO
-    pub hid_old_com: ComVar<F>,
     /// Bulletin membership witness. TODO
     pub memb_witness: Bul::MembershipWitnessVar,
 }
@@ -245,27 +288,12 @@ where
                 || Ok(rec.memb_witness.clone()),
                 mode,
             )?;
-            let hid_old_com = <ComVar<F>>::new_variable(
-                ns!(cs, "hid_old_com"),
-                || Ok(rec.hid_old_com.clone()),
-                mode,
-            )?;
-
-            let nonce = <FpVar<F>>::new_variable(ns!(cs, "nonce"), || Ok(rec.nonce.clone()), mode)?;
-            let post_nonce = <FpVar<F>>::new_variable(
-                ns!(cs, "post_nonce"),
-                || Ok(rec.post_nonce.clone()),
-                mode,
-            )?;
 
             Ok(Self {
                 user,
                 scan_args,
                 nul,
                 com_rand,
-                nonce,
-                post_nonce,
-                hid_old_com,
                 memb_witness,
             })
         })
@@ -313,7 +341,7 @@ where
     }
 
     fn state_len(&self) -> usize {
-        3
+        2
     }
 
     fn generate_step_constraints(
@@ -330,23 +358,25 @@ where
 
         let cu = User::commit_in_zk::<H>(external_inputs.user.clone())?;
 
-        let outside_commitment = [cu, external_inputs.nonce.clone()].to_vec();
-        let u = H::hash_in_zk(&outside_commitment)?;
+        cu.enforce_equal(&z_i[0])?;
 
-        u.enforce_equal(&z_i[0])?;
-        H::hash_in_zk(&[
-            external_inputs.hid_old_com.clone(),
-            external_inputs.nonce.clone(),
-        ])?
-        .enforce_equal(&z_i[1])?;
-        Bul::enforce_membership_of(
-            external_inputs.hid_old_com.clone(),
-            external_inputs.memb_witness,
-            Bul::MembershipPubVar::new_constant(cs.clone(), self.const_memb.clone())?,
-        )?
-        .enforce_equal(&Boolean::TRUE)?;
+        // let outside_commitment = [cu, external_inputs.nonce.clone()].to_vec();
+        // let u = H::hash_in_zk(&outside_commitment)?;
+
+        // u.enforce_equal(&z_i[0])?;
+        // H::hash_in_zk(&[
+        //     external_inputs.hid_old_com.clone(),
+        //     external_inputs.nonce.clone(),
+        // ])?
+        // .enforce_equal(&z_i[1])?;
+        // Bul::enforce_membership_of(
+        //     external_inputs.hid_old_com.clone(),
+        //     external_inputs.memb_witness,
+        //     Bul::MembershipPubVar::new_constant(cs.clone(), self.const_memb.clone())?,
+        // )?
+        // .enforce_equal(&Boolean::TRUE)?;
         let mut p = PubScanArgsVar::new_constant(cs.clone(), self.const_args.clone())?;
-        p.cur_time = z_i[2].clone();
+        p.cur_time = z_i[1].clone();
         let mut new_user = scan_apply_method_zk::<F, U, CBArgs, CBArgsVar, Crypto, CBul, H, NUMCBS>(
             &external_inputs.user,
             p,
@@ -355,12 +385,8 @@ where
         new_user.zk_fields.nul = external_inputs.nul;
         new_user.zk_fields.com_rand = external_inputs.com_rand;
         Ok(vec![
-            H::hash_in_zk(&[
-                User::commit_in_zk::<H>(new_user)?,
-                external_inputs.post_nonce.clone(),
-            ])?,
-            H::hash_in_zk(&[external_inputs.hid_old_com, external_inputs.post_nonce])?,
-            z_i[2].clone(),
+            User::commit_in_zk::<H>(new_user)?,
+            z_i[1].clone(),
         ])
     }
 }

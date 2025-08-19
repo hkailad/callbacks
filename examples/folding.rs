@@ -10,13 +10,14 @@ use folding_schemes::{
     frontend::FCircuit,
     transcript::poseidon::poseidon_canonical_config,
 };
+use ark_relations::r1cs::ToConstraintField;
+use ark_snark::SNARK;
 use rand::thread_rng;
 use std::time::SystemTime;
 use zk_callbacks::{
-    crypto::hash::HasherZK,
     generic::{
         bulletin::{JoinableBulletin, PublicUserBul, UserBul},
-        fold::FoldingScan,
+        fold::{gen_fold_proof_snark_key, FoldingScan},
         interaction::{Callback, Interaction},
         object::{Id, Time},
         scan::PubScanArgs,
@@ -131,6 +132,8 @@ fn main() {
 
     // SERVER SIDE
 
+    let (pkf, vkf) = gen_fold_proof_snark_key::<F, Poseidon<2>, TestFolding, Groth16<E>, OSt>(&mut rng, Some(store.obj_bul.get_pubkey()));
+
     type NF = Nova<
         Projective,
         Projective2,
@@ -169,7 +172,7 @@ fn main() {
     let nova_params = NF::preprocess(&mut rng, &nova_preprocess_params).unwrap();
 
     let dummy_folding_scheme: NF =
-        NF::init(&nova_params, f_circ, [F::from(0); 3].to_vec()).unwrap();
+        NF::init(&nova_params, f_circ, [F::from(0); 2].to_vec()).unwrap();
 
     let server_params = (
         dummy_folding_scheme.r1cs,
@@ -277,8 +280,10 @@ fn main() {
 
     // user produces a folding proof
 
-    let (params, init, v, last_nonce) = u
-        .scan_and_create_fold_proof_inputs::<_, _, _, _, _, Poseidon<2>, 1>(
+    let start = SystemTime::now();
+
+    let (params, init, v, extra_verif) = u
+        .scan_and_create_fold_proof_inputs::<_, _, _, _, _, Poseidon<2>, Groth16<E>, 1>(
             &mut rng,
             <OSt as PublicUserBul<F, TestFolding>>::get_membership_data(
                 &store.obj_bul,
@@ -290,8 +295,12 @@ fn main() {
             (true, true),
             store.callback_bul.nmemb_bul.get_epoch(),
             cb_methods.clone(),
+            &pkf,
             2,
         );
+
+
+    println!("Rerandomization time: {:?}", start.elapsed().unwrap());
 
     let f_circ: FoldingScan<
         F,
@@ -344,8 +353,7 @@ fn main() {
         folding_scheme.z_0.clone(),
         folding_scheme.z_i.clone(),
         proof,
-        u.commit::<Poseidon<2>>(),
-        last_nonce,
+        extra_verif
     );
 
     println!("Blinding step time: {:?}", start.elapsed().unwrap());
@@ -362,13 +370,18 @@ fn main() {
             client_proof_data.1.clone(),
             client_proof_data.2.clone(),
             &client_proof_data.3,
-        );
+        ).is_ok();
 
-    let verif2 = client_proof_data.1[0] == client_proof_data.1[1]
-        && client_proof_data.1[2] == store.callback_bul.get_epoch();
+    let verif2 = client_proof_data.1[0] == client_proof_data.4.0
+        && client_proof_data.1[1] == store.callback_bul.get_epoch();
 
-    let verif3 =
-        <Poseidon<2>>::hash(&[client_proof_data.4, client_proof_data.5]) == client_proof_data.2[0];
+
+    let mut pub_inputs = vec![];
+    pub_inputs.extend::<Vec<F>>([client_proof_data.4.0, client_proof_data.4.1].to_field_elements().unwrap()); // pub args
+    // pub_inputs.extend::<Vec<F>>(store.obj_bul.get_pubkey().to_field_elements().unwrap()); // pub membership data (if not constant)
+    // The public membership data in this case is constant, so we don't need to pass it in as an
+    // argument
+    let verif3 = Groth16::<E>::verify(&vkf, &pub_inputs, &client_proof_data.4.2).unwrap_or(false);
 
     println!("{:?}", verify);
     println!("{:?}", verif2);
