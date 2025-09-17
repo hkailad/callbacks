@@ -2,7 +2,8 @@ use ark_bn254::{Bn254 as E, Fr as F, G1Projective as Projective};
 use ark_groth16::Groth16;
 use ark_grumpkin::Projective as Projective2;
 use ark_r1cs_std::{eq::EqGadget, fields::fp::FpVar, prelude::Boolean};
-use ark_relations::r1cs::Result as ArkResult;
+use ark_relations::r1cs::{Result as ArkResult, ToConstraintField};
+use ark_snark::SNARK;
 use folding_schemes::{
     FoldingScheme,
     commitment::pedersen::Pedersen,
@@ -10,14 +11,12 @@ use folding_schemes::{
     frontend::FCircuit,
     transcript::poseidon::poseidon_canonical_config,
 };
-use ark_relations::r1cs::ToConstraintField;
-use ark_snark::SNARK;
 use rand::thread_rng;
 use std::time::SystemTime;
 use zk_callbacks::{
     generic::{
         bulletin::{JoinableBulletin, PublicUserBul, UserBul},
-        fold::{gen_fold_proof_snark_key, FoldingScan},
+        fold::{FoldingScan, gen_fold_proof_snark_key},
         interaction::{Callback, Interaction},
         object::{Id, Time},
         scan::PubScanArgs,
@@ -132,7 +131,10 @@ fn main() {
 
     // SERVER SIDE
 
-    let (pkf, vkf) = gen_fold_proof_snark_key::<F, Poseidon<2>, TestFolding, Groth16<E>, OSt>(&mut rng, Some(store.obj_bul.get_pubkey()));
+    let (pkf, vkf) = gen_fold_proof_snark_key::<F, Poseidon<2>, TestFolding, Groth16<E>, OSt>(
+        &mut rng,
+        Some(store.obj_bul.get_pubkey()),
+    );
 
     type NF = Nova<
         Projective,
@@ -299,7 +301,6 @@ fn main() {
             2,
         );
 
-
     println!("Rerandomization time: {:?}", start.elapsed().unwrap());
 
     let f_circ: FoldingScan<
@@ -353,7 +354,7 @@ fn main() {
         folding_scheme.z_0.clone(),
         folding_scheme.z_i.clone(),
         proof,
-        extra_verif
+        extra_verif,
     );
 
     println!("Blinding step time: {:?}", start.elapsed().unwrap());
@@ -370,14 +371,18 @@ fn main() {
             client_proof_data.1.clone(),
             client_proof_data.2.clone(),
             &client_proof_data.3,
-        ).is_ok();
+        )
+        .is_ok();
 
     let verif2 = client_proof_data.1[0] == client_proof_data.4.0
         && client_proof_data.1[1] == store.callback_bul.get_epoch();
 
-
     let mut pub_inputs = vec![];
-    pub_inputs.extend::<Vec<F>>([client_proof_data.4.0, client_proof_data.4.1].to_field_elements().unwrap()); // pub args
+    pub_inputs.extend::<Vec<F>>(
+        [client_proof_data.4.0, client_proof_data.4.1]
+            .to_field_elements()
+            .unwrap(),
+    ); // pub args
     // pub_inputs.extend::<Vec<F>>(store.obj_bul.get_pubkey().to_field_elements().unwrap()); // pub membership data (if not constant)
     // The public membership data in this case is constant, so we don't need to pass it in as an
     // argument

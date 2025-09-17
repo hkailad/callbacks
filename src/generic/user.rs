@@ -1,19 +1,20 @@
 #[cfg(any(feature = "folding", doc))]
 #[cfg(feature = "folding")]
-use crate::generic::fold::{Rerand, RerandVar, FoldInput};
+use crate::generic::fold::{FoldInput, Rerand, RerandVar};
 #[cfg(any(feature = "folding", doc))]
 #[cfg(feature = "folding")]
-use crate::generic::object::{ComRandVar, ComRand};
+use crate::generic::object::{ComRand, ComRandVar};
 use crate::{
     crypto::{enc::AECipherSigZK, hash::FieldHash, rr::RRVerifier},
     generic::{
-        bulletin::PublicUserBul,
+        bulletin::{PublicCallbackBul, PublicUserBul},
         callbacks::{CallbackCom, add_ticket_to_hc, create_cbs_from_interaction},
         interaction::{
             ExecMethodCircuit, Interaction, ProvePredInCircuit, ProvePredicateCircuit,
             SingularPredicate,
         },
         object::{Com, ComVar, Nul, Ser, SerVar, Time, ZKFields, ZKFieldsVar},
+        scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, get_scan_interaction},
     },
 };
 use ark_crypto_primitives::sponge::Absorb;
@@ -37,10 +38,6 @@ use rand::{CryptoRng, Rng, RngCore, distributions::Standard, prelude::Distributi
 use std::{
     borrow::Borrow,
     io::{Read, Write},
-};
-use crate::generic::{
-    bulletin::PublicCallbackBul,
-    scan::{PrivScanArgs, PrivScanArgsVar, PubScanArgs, PubScanArgsVar, get_scan_interaction},
 };
 
 use crate::generic::interaction::Callback;
@@ -2636,11 +2633,7 @@ where
 
         (
             (ps_ret, bul_data.0),
-            [
-                commit,
-                cur_time,
-            ]
-            .to_vec(),
+            [commit, cur_time].to_vec(),
             v,
             (commit, old_nul, proof),
         )
